@@ -1,12 +1,31 @@
 {
   "name": "ai-day-planner",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "A modern, cross-platform day planner with AI-powered features, built with Next.js, TypeScript, and MongoDB",
+  "author": "BotleApps",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BotleApps/ai-day-planner.git"
+  },
+  "keywords": [
+    "nextjs",
+    "react",
+    "typescript",
+    "mongodb",
+    "day-planner",
+    "task-management",
+    "vercel",
+    "tailwind"
+  ],
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^0.562.0",
@@ -25,5 +44,9 @@
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
