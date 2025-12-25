@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
     const client = await clientPromise;
     const db = client.db('ai-day-planner');
     
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (time !== undefined) updateData.time = time;
