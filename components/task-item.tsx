@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Trash2, Clock } from 'lucide-react';
+import { Check, Trash2, Clock, GripVertical } from 'lucide-react';
 
 interface Task {
   _id: string;
@@ -18,47 +18,59 @@ interface TaskItemProps {
 
 export function TaskItem({ task, onToggle, onDelete }: TaskItemProps) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-100 dark:border-gray-700">
+    <div className={`glass-card task-card rounded-2xl p-5 group ${task.completed ? 'opacity-75' : ''}`}>
       <div className="flex items-start gap-4">
+        {/* Drag Handle (visual only for now) */}
+        <div className="flex-shrink-0 mt-1 opacity-0 group-hover:opacity-50 transition-opacity cursor-grab">
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </div>
+
+        {/* Checkbox */}
         <button
           onClick={() => onToggle(task._id, !task.completed)}
-          className={`flex-shrink-0 mt-1 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+          className={`flex-shrink-0 mt-0.5 w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${
             task.completed
-              ? 'bg-green-500 border-green-500'
-              : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
+              ? 'bg-gradient-to-br from-green-500 to-emerald-500 border-transparent shadow-lg shadow-green-500/30'
+              : 'border-border hover:border-green-500 hover:shadow-lg hover:shadow-green-500/20'
           }`}
         >
-          {task.completed && <Check className="h-4 w-4 text-white" />}
+          <Check className={`h-4 w-4 text-white transition-all duration-300 ${task.completed ? 'scale-100' : 'scale-0'}`} />
         </button>
         
+        {/* Content */}
         <div className="flex-1 min-w-0">
           <h3
-            className={`text-lg font-semibold ${
+            className={`text-lg font-semibold transition-all duration-300 ${
               task.completed
-                ? 'text-gray-400 dark:text-gray-500 line-through'
-                : 'text-gray-900 dark:text-gray-100'
+                ? 'text-muted-foreground line-through'
+                : 'text-foreground'
             }`}
           >
             {task.title}
           </h3>
           
           {task.description && (
-            <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm">
+            <p className={`mt-1.5 text-sm transition-colors ${task.completed ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
               {task.description}
             </p>
           )}
           
           {task.time && (
-            <div className="flex items-center gap-1 mt-2 text-blue-600 dark:text-blue-400 text-sm">
-              <Clock className="h-4 w-4" />
+            <div className={`inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              task.completed 
+                ? 'bg-muted text-muted-foreground' 
+                : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+            }`}>
+              <Clock className="h-3.5 w-3.5" />
               <span>{task.time}</span>
             </div>
           )}
         </div>
         
+        {/* Delete Button */}
         <button
           onClick={() => onDelete(task._id)}
-          className="flex-shrink-0 p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+          className="flex-shrink-0 p-2.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all duration-200 opacity-0 group-hover:opacity-100"
           aria-label="Delete task"
         >
           <Trash2 className="h-5 w-5" />
