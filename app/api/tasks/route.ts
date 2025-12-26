@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
+import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
 export async function GET() {
   try {
-    const client = await clientPromise;
-    const db = client.db('ai-day-planner');
+    const db = await getDatabase();
     const tasks = await db.collection('tasks').find({}).sort({ createdAt: -1 }).toArray();
     
     return NextResponse.json({ tasks });
   } catch (error) {
     console.error('Error fetching tasks:', error);
-    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch tasks', tasks: [] }, { status: 500 });
   }
 }
 
@@ -24,8 +23,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
     
-    const client = await clientPromise;
-    const db = client.db('ai-day-planner');
+    const db = await getDatabase();
     
     const task = {
       title,
@@ -54,8 +52,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
     
-    const client = await clientPromise;
-    const db = client.db('ai-day-planner');
+    const db = await getDatabase();
     
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (title !== undefined) updateData.title = title;
@@ -88,8 +85,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
     
-    const client = await clientPromise;
-    const db = client.db('ai-day-planner');
+    const db = await getDatabase();
     
     const result = await db.collection('tasks').deleteOne({ _id: new ObjectId(id) });
     
