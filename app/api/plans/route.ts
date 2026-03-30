@@ -3,6 +3,7 @@ import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { Plan, DayPlan, DEFAULT_PREFERENCES } from '@/lib/types';
 import { generateId, getDatesBetween } from '@/lib/utils';
+import { auth } from '@/auth';
 
 // GET all plans or single plan by ID
 export async function GET(request: Request) {
@@ -13,14 +14,7 @@ export async function GET(request: Request) {
 
     const db = await getDatabase();
 
-    if (planId) {
-      const plan = await db.collection('plans').findOne({ _id: new ObjectId(planId) });
-      if (!plan) {
-        return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
-      }
-      return NextResponse.json({ plan });
-    }
-
+    // Public share link — no auth required
     if (shareLink) {
       const plan = await db.collection('plans').findOne({ 'sharing.shareLink': shareLink });
       if (!plan) {
@@ -29,9 +23,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ plan });
     }
 
-    // Return all plans (for authenticated user - simplified for now)
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = session.user.id;
+
+    if (planId) {
+      const plan = await db.collection('plans').findOne({
+        _id: new ObjectId(planId),
+        createdBy: userId,
+      });
+      if (!plan) {
+        return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+      }
+      return NextResponse.json({ plan });
+    }
+
     const plans = await db.collection('plans')
-      .find({})
+      .find({ createdBy: userId })
       .sort({ updatedAt: -1 })
       .toArray();
 
@@ -45,34 +55,52 @@ export async function GET(request: Request) {
 // POST create new plan
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { 
-      title, 
-      description, 
-      destination, 
-      startDate, 
-      endDate, 
+    const {
+      title,
+      description,
+      destination,
+      startDate,
+      endDate,
       preferences,
       coverImage,
+      days: incomingDays,
     } = body;
 
     if (!title || !startDate || !endDate) {
       return NextResponse.json(
-        { error: 'Title, start date, and end date are required' }, 
+        { error: 'Title, start date, and end date are required' },
         { status: 400 }
       );
     }
 
     const db = await getDatabase();
 
-    // Generate days for the plan
     const dates = getDatesBetween(startDate, endDate);
-    const days: DayPlan[] = dates.map((date, index) => ({
-      id: generateId(),
-      date,
-      dayNumber: index + 1,
-      activities: [],
-    }));
+    const days: DayPlan[] = incomingDays?.length
+      ? incomingDays.map((d: DayPlan, i: number) => ({
+          ...d,
+          id: d.id || generateId(),
+          date: d.date || dates[i] || startDate,
+          dayNumber: d.dayNumber || i + 1,
+          activities: (d.activities || []).map((a, ai) => ({
+            ...a,
+            id: a.id || generateId(),
+            order: a.order ?? ai,
+            status: a.status || 'planned',
+          })),
+        }))
+      : dates.map((date, index) => ({
+          id: generateId(),
+          date,
+          dayNumber: index + 1,
+          activities: [],
+        }));
 
     const plan: Omit<Plan, '_id'> = {
       id: generateId(),
@@ -89,15 +117,15 @@ export async function POST(request: Request) {
         isPublic: false,
         sharedWith: [],
       },
-      createdBy: 'anonymous', // Would be actual user ID
+      createdBy: session.user.id,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await db.collection('plans').insertOne(plan);
 
-    return NextResponse.json({ 
-      plan: { ...plan, _id: result.insertedId } 
+    return NextResponse.json({
+      plan: { ...plan, _id: result.insertedId },
     });
   } catch (error) {
     console.error('Error creating plan:', error);
@@ -108,6 +136,11 @@ export async function POST(request: Request) {
 // PUT update plan
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -117,20 +150,20 @@ export async function PUT(request: Request) {
 
     const db = await getDatabase();
 
-    // Handle date range updates (regenerate days if needed)
     if (updates.startDate || updates.endDate) {
-      const existingPlan = await db.collection('plans').findOne({ _id: new ObjectId(id) });
+      const existingPlan = await db.collection('plans').findOne({
+        _id: new ObjectId(id),
+        createdBy: session.user.id,
+      });
       if (!existingPlan) {
         return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
       }
 
       const newStartDate = updates.startDate || existingPlan.startDate;
       const newEndDate = updates.endDate || existingPlan.endDate;
-      
+
       if (newStartDate !== existingPlan.startDate || newEndDate !== existingPlan.endDate) {
         const dates = getDatesBetween(newStartDate, newEndDate);
-        
-        // Try to preserve existing day data where dates match
         const newDays: DayPlan[] = dates.map((date, index) => {
           const existingDay = existingPlan.days?.find((d: DayPlan) => d.date === date);
           return existingDay || {
@@ -140,7 +173,6 @@ export async function PUT(request: Request) {
             activities: [],
           };
         });
-        
         updates.days = newDays;
       }
     }
@@ -148,7 +180,7 @@ export async function PUT(request: Request) {
     updates.updatedAt = new Date();
 
     const result = await db.collection('plans').updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id), createdBy: session.user.id },
       { $set: updates }
     );
 
@@ -166,6 +198,11 @@ export async function PUT(request: Request) {
 // DELETE plan
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -175,7 +212,10 @@ export async function DELETE(request: Request) {
 
     const db = await getDatabase();
 
-    const result = await db.collection('plans').deleteOne({ _id: new ObjectId(id) });
+    const result = await db.collection('plans').deleteOne({
+      _id: new ObjectId(id),
+      createdBy: session.user.id,
+    });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 });

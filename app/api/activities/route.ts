@@ -3,23 +3,32 @@ import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { Activity, DayPlan } from '@/lib/types';
 import { generateId, sortByTime } from '@/lib/utils';
+import { auth } from '@/auth';
 
 // GET activities for a day
 export async function GET(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const planId = searchParams.get('planId');
     const dayId = searchParams.get('dayId');
 
     if (!planId || !dayId) {
       return NextResponse.json(
-        { error: 'Plan ID and Day ID are required' }, 
+        { error: 'Plan ID and Day ID are required' },
         { status: 400 }
       );
     }
 
     const db = await getDatabase();
-    const plan = await db.collection('plans').findOne({ _id: new ObjectId(planId) });
+    const plan = await db.collection('plans').findOne({
+      _id: new ObjectId(planId),
+      createdBy: session.user.id,
+    });
 
     if (!plan) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
@@ -30,8 +39,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Day not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ 
-      activities: sortByTime(day.activities || []) 
+    return NextResponse.json({
+      activities: sortByTime(day.activities || []),
     });
   } catch (error) {
     console.error('Error fetching activities:', error);
@@ -42,19 +51,23 @@ export async function GET(request: Request) {
 // POST add activity to a day
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { planId, dayId, activity } = body;
 
     if (!planId || !dayId || !activity) {
       return NextResponse.json(
-        { error: 'Plan ID, Day ID, and activity are required' }, 
+        { error: 'Plan ID, Day ID, and activity are required' },
         { status: 400 }
       );
     }
 
     const db = await getDatabase();
 
-    // Add ID if not present
     const newActivity: Activity = {
       ...activity,
       id: activity.id || generateId(),
@@ -63,12 +76,13 @@ export async function POST(request: Request) {
     };
 
     const result = await db.collection('plans').updateOne(
-      { 
+      {
         _id: new ObjectId(planId),
+        createdBy: session.user.id,
         'days.id': dayId,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { 
+      {
         $push: { 'days.$.activities': newActivity },
         $set: { updatedAt: new Date() },
       } as any
@@ -88,19 +102,23 @@ export async function POST(request: Request) {
 // PUT update activity
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { planId, dayId, activityId, updates } = body;
 
     if (!planId || !dayId || !activityId) {
       return NextResponse.json(
-        { error: 'Plan ID, Day ID, and Activity ID are required' }, 
+        { error: 'Plan ID, Day ID, and Activity ID are required' },
         { status: 400 }
       );
     }
 
     const db = await getDatabase();
 
-    // Build update object for nested array
     const updateFields: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(updates)) {
       updateFields[`days.$[day].activities.$[activity].${key}`] = value;
@@ -108,7 +126,7 @@ export async function PUT(request: Request) {
     updateFields['updatedAt'] = new Date();
 
     const result = await db.collection('plans').updateOne(
-      { _id: new ObjectId(planId) },
+      { _id: new ObjectId(planId), createdBy: session.user.id },
       { $set: updateFields },
       {
         arrayFilters: [
@@ -132,6 +150,11 @@ export async function PUT(request: Request) {
 // DELETE activity
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const planId = searchParams.get('planId');
     const dayId = searchParams.get('dayId');
@@ -139,7 +162,7 @@ export async function DELETE(request: Request) {
 
     if (!planId || !dayId || !activityId) {
       return NextResponse.json(
-        { error: 'Plan ID, Day ID, and Activity ID are required' }, 
+        { error: 'Plan ID, Day ID, and Activity ID are required' },
         { status: 400 }
       );
     }
@@ -147,12 +170,13 @@ export async function DELETE(request: Request) {
     const db = await getDatabase();
 
     const result = await db.collection('plans').updateOne(
-      { 
+      {
         _id: new ObjectId(planId),
+        createdBy: session.user.id,
         'days.id': dayId,
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { 
+      {
         $pull: { 'days.$.activities': { id: activityId } },
         $set: { updatedAt: new Date() },
       } as any
@@ -172,31 +196,36 @@ export async function DELETE(request: Request) {
 // PATCH - Bulk update activities (for reordering, replacing all)
 export async function PATCH(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { planId, dayId, activities } = body;
 
     if (!planId || !dayId || !activities) {
       return NextResponse.json(
-        { error: 'Plan ID, Day ID, and activities are required' }, 
+        { error: 'Plan ID, Day ID, and activities are required' },
         { status: 400 }
       );
     }
 
     const db = await getDatabase();
 
-    // Update activities with proper order
     const orderedActivities = activities.map((a: Activity, index: number) => ({
       ...a,
       order: index,
     }));
 
     const result = await db.collection('plans').updateOne(
-      { 
+      {
         _id: new ObjectId(planId),
+        createdBy: session.user.id,
         'days.id': dayId,
       },
-      { 
-        $set: { 
+      {
+        $set: {
           'days.$.activities': sortByTime(orderedActivities),
           updatedAt: new Date(),
         },

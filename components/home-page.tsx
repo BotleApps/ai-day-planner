@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { Plan } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
+import { ImportItineraryModal } from '@/components/import-itinerary-modal';
 import {
   Plus,
   Calendar,
@@ -21,6 +23,8 @@ import {
   Star,
   X,
   Settings,
+  FileText,
+  LogOut,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -37,11 +41,13 @@ const QUICK_TEMPLATES = [
 
 export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [menuPlanId, setMenuPlanId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     fetchPlans();
@@ -99,7 +105,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           </div>
           <div className="header-actions">
             {hasPlans && (
-              <button 
+              <button
                 className="icon-btn"
                 onClick={() => setShowSearch(!showSearch)}
               >
@@ -109,6 +115,32 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
             <button className="icon-btn" onClick={() => router.push('/settings')} title="Settings">
               <Settings size={18} />
             </button>
+            {session?.user && (
+              <div className="user-menu">
+                {session.user.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name ?? 'User'}
+                    className="avatar"
+                    width={32}
+                    height={32}
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="avatar-fallback">
+                    {session.user.name?.[0]?.toUpperCase() ?? 'U'}
+                  </div>
+                )}
+                <button
+                  className="icon-btn"
+                  onClick={() => signOut({ callbackUrl: '/sign-in' })}
+                  title={`Sign out (${session.user.name})`}
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
         
@@ -176,6 +208,10 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
               <button className="primary-btn compact" onClick={onCreatePlan}>
                 <Plus size={18} />
                 <span>New</span>
+              </button>
+              <button className="import-btn" onClick={() => setShowImport(true)}>
+                <FileText size={16} />
+                <span>Import</span>
               </button>
             </div>
 
@@ -266,6 +302,17 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         )}
       </main>
 
+      {/* Import Itinerary Modal */}
+      <ImportItineraryModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onPlanCreated={(planId) => {
+          setShowImport(false);
+          fetchPlans();
+          onSelectPlan(planId);
+        }}
+      />
+
       {/* Click outside to close menu */}
       {menuPlanId && (
         <div 
@@ -341,6 +388,34 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         .icon-btn:hover {
           background: var(--muted);
           color: var(--foreground);
+        }
+
+        .user-menu {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 1.5px solid var(--border);
+          object-fit: cover;
+        }
+
+        .avatar-fallback {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--primary);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
         }
 
         .search-bar {
@@ -487,6 +562,27 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
 
         .primary-btn:active {
           transform: translateY(0);
+        }
+
+        .import-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 16px;
+          background: transparent;
+          color: var(--foreground);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .import-btn:hover {
+          background: var(--muted);
+          border-color: var(--primary);
+          color: var(--primary);
         }
 
         .quick-start {

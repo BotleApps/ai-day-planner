@@ -127,6 +127,17 @@ export interface SharingSettings {
   sharedWith: SharedUser[];
 }
 
+export interface Task {
+  _id?: string;
+  userId: string;           // Google OAuth sub (session.user.id)
+  title: string;
+  description?: string;
+  time?: string | null;
+  completed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface SharedUser {
   id: string;
   email: string;

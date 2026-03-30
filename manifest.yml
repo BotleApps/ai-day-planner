@@ -1,0 +1,20 @@
+---
+applications:
+  - name: ai-day-planner
+    memory: 512M
+    disk_quota: 1024M
+    instances: 1
+    buildpacks:
+      - nodejs_buildpack
+    command: node .next/standalone/server.js
+    health-check-type: http
+    health-check-http-endpoint: /api/health
+    env:
+      NODE_ENV: production
+      # Secrets are injected via 'cf set-env' in deploy.sh — do NOT commit values here.
+      # Required variables:
+      #   MONGODB_URI         — MongoDB Atlas connection string
+      #   NEXTAUTH_SECRET     — Random secret (openssl rand -base64 32)
+      #   NEXTAUTH_URL        — Full HTTPS URL of this CF app
+      #   GOOGLE_CLIENT_ID    — Google OAuth client ID
+      #   GOOGLE_CLIENT_SECRET — Google OAuth client secret

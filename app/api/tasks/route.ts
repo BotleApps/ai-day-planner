@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { auth } from '@/auth';
 
 export async function GET() {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized', tasks: [] }, { status: 401 });
+    }
+
     const db = await getDatabase();
-    const tasks = await db.collection('tasks').find({}).sort({ createdAt: -1 }).toArray();
-    
+    const tasks = await db.collection('tasks')
+      .find({ userId: session.user.id })
+      .sort({ createdAt: -1 })
+      .toArray();
+
     return NextResponse.json({ tasks });
   } catch (error) {
     console.error('Error fetching tasks:', error);
@@ -16,16 +25,22 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { title, description, time, completed } = body;
-    
+
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
-    
+
     const db = await getDatabase();
-    
+
     const task = {
+      userId: session.user.id,
       title,
       description: description || '',
       time: time || null,
@@ -33,9 +48,9 @@ export async function POST(request: Request) {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
+
     const result = await db.collection('tasks').insertOne(task);
-    
+
     return NextResponse.json({ task: { ...task, _id: result.insertedId } });
   } catch (error) {
     console.error('Error creating task:', error);
@@ -45,30 +60,35 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, title, description, time, completed } = body;
-    
+
     if (!id) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
-    
+
     const db = await getDatabase();
-    
+
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (time !== undefined) updateData.time = time;
     if (completed !== undefined) updateData.completed = completed;
-    
+
     const result = await db.collection('tasks').updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id), userId: session.user.id },
       { $set: updateData }
     );
-    
+
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
-    
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating task:', error);
@@ -78,21 +98,29 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    
+
     if (!id) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
-    
+
     const db = await getDatabase();
-    
-    const result = await db.collection('tasks').deleteOne({ _id: new ObjectId(id) });
-    
+
+    const result = await db.collection('tasks').deleteOne({
+      _id: new ObjectId(id),
+      userId: session.user.id,
+    });
+
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
-    
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting task:', error);

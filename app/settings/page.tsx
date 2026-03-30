@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import { useSession, signOut } from 'next-auth/react';
 import {
   ArrowLeft,
   Sun,
@@ -13,11 +14,13 @@ import {
   CheckCircle2,
   Bot,
   AlertCircle,
+  LogOut,
 } from 'lucide-react';
 import { loadAISettings, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
@@ -65,6 +68,45 @@ export default function SettingsPage() {
       </header>
 
       <div className="scroll">
+
+        {/* ── Account ────────────────────────────── */}
+        {session?.user && (
+          <>
+            <div className="group-label">Account</div>
+            <div className="group">
+              <div className="row no-hover">
+                <div className="row-left">
+                  {session.user.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name ?? 'User'}
+                      className="avatar"
+                      width={30}
+                      height={30}
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="avatar-fallback">
+                      {session.user.name?.[0]?.toUpperCase() ?? 'U'}
+                    </div>
+                  )}
+                  <div className="row-text">
+                    <span className="row-title">{session.user.name ?? 'Signed in'}</span>
+                    <span className="row-desc">{session.user.email}</span>
+                  </div>
+                </div>
+                <button
+                  className="sign-out-btn"
+                  onClick={() => signOut({ callbackUrl: '/sign-in' })}
+                >
+                  <LogOut size={14} />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ── Appearance ─────────────────────────── */}
         <div className="group-label">Appearance</div>
@@ -370,6 +412,53 @@ export default function SettingsPage() {
           border-color: var(--primary);
           background: color-mix(in srgb, var(--primary) 12%, var(--background));
           color: var(--primary);
+        }
+
+        /* Account */
+        .avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          border: 1.5px solid var(--border);
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+
+        .avatar-fallback {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          background: var(--primary);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .sign-out-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          background: transparent;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--muted-foreground);
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.15s;
+          flex-shrink: 0;
+        }
+
+        .sign-out-btn:hover {
+          border-color: #ef4444;
+          color: #ef4444;
+          background: rgba(239, 68, 68, 0.06);
         }
 
         /* Connected badge */
