@@ -21,7 +21,7 @@ function HomeContent() {
       setSelectedPlanId(planId);
     } else if (shareLink) {
       // Fetch plan by share link
-      fetch(`/api/plans?shareLink=${shareLink}`)
+      fetch(`/api/plans?share=${shareLink}`)
         .then(res => res.json())
         .then(data => {
           if (data.plan) {

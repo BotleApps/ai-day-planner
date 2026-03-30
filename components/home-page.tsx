@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
 import { Plan } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { ImportItineraryModal } from '@/components/import-itinerary-modal';
+import { UserMenu } from '@/components/user-menu';
 import {
   Plus,
   Calendar,
@@ -22,9 +21,7 @@ import {
   MoreVertical,
   Star,
   X,
-  Settings,
   FileText,
-  LogOut,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -40,8 +37,6 @@ const QUICK_TEMPLATES = [
 ];
 
 export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
-  const router = useRouter();
-  const { data: session } = useSession();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,35 +107,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
                 <Search size={20} />
               </button>
             )}
-            <button className="icon-btn" onClick={() => router.push('/settings')} title="Settings">
-              <Settings size={18} />
-            </button>
-            {session?.user && (
-              <div className="user-menu">
-                {session.user.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={session.user.image}
-                    alt={session.user.name ?? 'User'}
-                    className="avatar"
-                    width={32}
-                    height={32}
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="avatar-fallback">
-                    {session.user.name?.[0]?.toUpperCase() ?? 'U'}
-                  </div>
-                )}
-                <button
-                  className="icon-btn"
-                  onClick={() => signOut({ callbackUrl: '/sign-in' })}
-                  title={`Sign out (${session.user.name})`}
-                >
-                  <LogOut size={16} />
-                </button>
-              </div>
-            )}
+            <UserMenu />
           </div>
         </div>
         

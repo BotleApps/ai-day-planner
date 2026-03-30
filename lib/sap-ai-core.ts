@@ -110,6 +110,7 @@ export async function chat(
   settings: AISettings,
   systemPrompt: string,
   userMessage: string,
+  maxTokens = 4000,
 ): Promise<string> {
   const token = await getToken(settings);
   const apiUrl = settings.apiUrl.replace(/\/$/, '');
@@ -127,7 +128,7 @@ export async function chat(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
-        max_tokens: 2000,
+        max_tokens: maxTokens,
         temperature: 0.7,
       };
       break;
@@ -137,7 +138,7 @@ export async function chat(
       payload = {
         messages: [{ role: 'user', content: [{ text: userMessage }] }],
         system: [{ text: systemPrompt }],
-        inferenceConfig: { maxTokens: 2000, temperature: 0.7 },
+        inferenceConfig: { maxTokens, temperature: 0.7 },
       };
       break;
 
@@ -147,7 +148,7 @@ export async function chat(
         contents: [
           { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] },
         ],
-        generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
       };
       break;
 
@@ -159,7 +160,7 @@ export async function chat(
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!resp.ok) {

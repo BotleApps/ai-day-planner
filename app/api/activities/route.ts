@@ -25,9 +25,13 @@ export async function GET(request: Request) {
     }
 
     const db = await getDatabase();
+    // Allow access if the user owns the plan OR if the plan has a public share link
     const plan = await db.collection('plans').findOne({
       _id: new ObjectId(planId),
-      createdBy: session.user.id,
+      $or: [
+        { createdBy: session.user.id },
+        { 'sharing.shareLink': { $exists: true, $ne: null } },
+      ],
     });
 
     if (!plan) {

@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const raw = await chat(settings, SYSTEM_PROMPT, text.slice(0, 12000)); // cap at 12k chars
+    const raw = await chat(settings, SYSTEM_PROMPT, text.slice(0, 12000), 8000); // cap input at 12k chars, allow 8k output tokens
     const parsed = parseAIJson(raw);
 
     // Normalise days into full Activity objects

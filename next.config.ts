@@ -4,6 +4,9 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Standalone output required for SAP BTP Cloud Foundry deployment
   output: 'standalone',
+  // Tell Next.js/Turbopack NOT to bundle these Node.js packages — load them
+  // natively at runtime so their internal require() paths aren't mangled.
+  serverExternalPackages: ['pdf-parse', 'officeparser', 'pdfjs-dist'],
   // Turbopack configuration
   turbopack: {
     root: path.resolve(__dirname),

@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   Upload,
+  FileUp,
 } from 'lucide-react';
 import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import { DayPlan, DEFAULT_PREFERENCES } from '@/lib/types';
@@ -33,7 +34,7 @@ interface ImportItineraryModalProps {
   onPlanCreated: (planId: string) => void;
 }
 
-type Stage = 'input' | 'parsing' | 'preview' | 'creating' | 'error';
+type Stage = 'input' | 'extracting' | 'parsing' | 'preview' | 'creating' | 'error';
 
 export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportItineraryModalProps) {
   const [stage, setStage] = useState<Stage>('input');
@@ -120,17 +121,46 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
     onClose();
   };
 
-  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const content = ev.target?.result as string;
-      setText(content.slice(0, 30000));
-      if (textareaRef.current) textareaRef.current.focus();
-    };
-    reader.readAsText(file);
     e.target.value = '';
+
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const isPlainText = ext === 'txt' || ext === 'md';
+
+    if (isPlainText) {
+      // Read directly in browser
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const content = ev.target?.result as string;
+        setText(content.slice(0, 30000));
+        if (textareaRef.current) textareaRef.current.focus();
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    // Send to server-side extraction API (PDF, PPTX, DOCX…)
+    setStage('extracting');
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const resp = await fetch('/api/ai/extract-file', { method: 'POST', body: form });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setError(data.error || `Could not read file (HTTP ${resp.status})`);
+        setStage('error');
+        return;
+      }
+      setText(data.text ?? '');
+      setStage('input');
+      if (textareaRef.current) textareaRef.current.focus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+      setStage('error');
+    }
   };
 
   const totalActivities = parsed?.days.reduce((s, d) => s + d.activities.length, 0) ?? 0;
@@ -175,13 +205,25 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
                 <div className="input-toolbar">
                   <span className="input-label">
                     <FileText size={14} />
-                    Paste your itinerary, travel document, or trip description
+                    Paste your itinerary or upload a document
                   </span>
-                  <label className="upload-btn">
-                    <Upload size={14} />
-                    Upload .txt
-                    <input type="file" accept=".txt,.md" onChange={handleFileRead} hidden />
-                  </label>
+                  <div className="upload-btns">
+                    <label className="upload-btn">
+                      <Upload size={13} />
+                      .txt / .md
+                      <input type="file" accept=".txt,.md" onChange={handleFileUpload} hidden />
+                    </label>
+                    <label className="upload-btn upload-btn-rich">
+                      <FileUp size={13} />
+                      PDF / PPT / Word
+                      <input
+                        type="file"
+                        accept=".pdf,.pptx,.ppt,.docx,.doc"
+                        onChange={handleFileUpload}
+                        hidden
+                      />
+                    </label>
+                  </div>
                 </div>
                 <textarea
                   ref={textareaRef}
@@ -205,6 +247,17 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
                 </div>
               )}
             </>
+          )}
+
+          {/* ── EXTRACTING STAGE ───────────────────────────── */}
+          {stage === 'extracting' && (
+            <div className="parsing-state">
+              <div className="parsing-spinner">
+                <Loader2 size={32} className="spin" />
+              </div>
+              <p className="parsing-title">Reading your file…</p>
+              <p className="parsing-desc">Extracting text from the document. This only takes a moment.</p>
+            </div>
           )}
 
           {/* ── PARSING STAGE ──────────────────────────────── */}
@@ -323,6 +376,10 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
 
           {stage === 'parsing' && (
             <button className="btn-ghost" onClick={handleClose}>Cancel</button>
+          )}
+
+          {stage === 'extracting' && (
+            <button className="btn-ghost" onClick={() => setStage('input')}>Cancel</button>
           )}
         </div>
       </div>
@@ -447,11 +504,17 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           font-weight: 600;
           color: var(--muted-foreground);
         }
+        .upload-btns {
+          display: flex;
+          gap: 6px;
+          flex-shrink: 0;
+        }
+
         .upload-btn {
           display: flex;
           align-items: center;
           gap: 5px;
-          padding: 5px 12px;
+          padding: 5px 10px;
           border: 1px solid var(--border);
           border-radius: 7px;
           font-size: 12px;
@@ -463,6 +526,15 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           white-space: nowrap;
         }
         .upload-btn:hover { border-color: var(--primary); }
+
+        .upload-btn-rich {
+          border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+          color: var(--primary);
+          background: color-mix(in srgb, var(--primary) 6%, var(--background));
+        }
+        .upload-btn-rich:hover {
+          background: color-mix(in srgb, var(--primary) 12%, var(--background));
+        }
 
         textarea {
           width: 100%;

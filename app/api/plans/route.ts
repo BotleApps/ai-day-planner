@@ -32,7 +32,10 @@ export async function GET(request: Request) {
     if (planId) {
       const plan = await db.collection('plans').findOne({
         _id: new ObjectId(planId),
-        createdBy: userId,
+        $or: [
+          { createdBy: userId },
+          { 'sharing.shareLink': { $exists: true, $ne: null } },
+        ],
       });
       if (!plan) {
         return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
