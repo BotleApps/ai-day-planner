@@ -1,22 +1,23 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Activity, DayPlan, PlanPreferences, ACTIVITY_ICONS } from '@/lib/types';
 import { generateId, formatDuration } from '@/lib/utils';
+import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import {
   Sparkles,
   Send,
   Loader2,
   Wand2,
-  Calendar,
   Clock,
   MapPin,
   Lightbulb,
-  RefreshCw,
   ChevronDown,
   ChevronUp,
   Plus,
   Zap,
+  Settings,
 } from 'lucide-react';
 
 interface AIPanelProps {
@@ -50,14 +51,21 @@ export function AIPanel({
   destination,
   onAddActivity,
   onReplaceActivities,
-  onSuggestChange,
+  onSuggestChange: _onSuggestChange,
   isFloating = false,
 }: AIPanelProps) {
+  const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const settings = loadAISettings();
+    setAiConfigured(isAIConfigured(settings));
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,130 +75,37 @@ export function AIPanel({
     scrollToBottom();
   }, [messages]);
 
-  const generateAISuggestions = async (prompt: string): Promise<{
-    message: string;
-    suggestions: Partial<Activity>[];
-  }> => {
-    // Simulate AI response - In production, this would call your AI API
-    await new Promise(resolve => setTimeout(resolve, 1500));
+  const callAI = async (prompt: string): Promise<{ message: string; suggestions: Partial<Activity>[] }> => {
+    const settings = loadAISettings();
 
-    const currentTime = day.activities.length > 0
-      ? day.activities[day.activities.length - 1].startTime
-      : preferences.wakeUpTime;
-
-    // Generate contextual suggestions based on prompt
-    if (prompt.toLowerCase().includes('plan') || prompt.toLowerCase().includes('day')) {
-      return {
-        message: `I've created a balanced day plan for ${destination || 'your trip'}! Here are activities spread throughout the day with proper breaks and meal times.`,
-        suggestions: [
-          {
-            title: 'Morning Walk & Coffee',
-            type: 'activity',
-            duration: 45,
-            startTime: '08:00',
-            description: 'Start your day with fresh air and local coffee',
-          },
-          {
-            title: 'Breakfast',
-            type: 'meal',
-            duration: 60,
-            startTime: '09:00',
-            location: 'Local café',
-          },
-          {
-            title: 'Main Attraction Visit',
-            type: 'sightseeing',
-            duration: 180,
-            startTime: '10:30',
-            description: 'Explore the main highlights',
-          },
-          {
-            title: 'Lunch Break',
-            type: 'meal',
-            duration: 75,
-            startTime: '13:30',
-          },
-          {
-            title: 'Afternoon Activity',
-            type: 'entertainment',
-            duration: 120,
-            startTime: '15:00',
-          },
-          {
-            title: 'Rest & Refresh',
-            type: 'rest',
-            duration: 60,
-            startTime: '17:30',
-          },
-          {
-            title: 'Dinner',
-            type: 'meal',
-            duration: 90,
-            startTime: '19:00',
-          },
-        ],
-      };
+    if (!isAIConfigured(settings)) {
+      throw new Error('not_configured');
     }
 
-    if (prompt.toLowerCase().includes('break')) {
-      return {
-        message: 'Based on your activities, here are some well-timed breaks to keep you refreshed:',
-        suggestions: [
-          {
-            title: 'Coffee Break',
-            type: 'rest',
-            duration: 20,
-            startTime: '10:30',
-            description: 'Quick refreshment break',
-          },
-          {
-            title: 'Afternoon Rest',
-            type: 'rest',
-            duration: 30,
-            startTime: '15:00',
-            description: 'Recharge your energy',
-          },
-        ],
-      };
-    }
-
-    if (prompt.toLowerCase().includes('nearby') || prompt.toLowerCase().includes('activit')) {
-      return {
-        message: `Here are some popular activities ${destination ? `in ${destination}` : 'nearby'}:`,
-        suggestions: [
-          {
-            title: 'Local Museum',
-            type: 'sightseeing',
-            duration: 120,
-            description: 'Discover local history and culture',
-          },
-          {
-            title: 'Walking Tour',
-            type: 'activity',
-            duration: 90,
-            description: 'Guided tour of the area',
-          },
-          {
-            title: 'Food Market',
-            type: 'shopping',
-            duration: 60,
-            description: 'Try local delicacies',
-          },
-        ],
-      };
-    }
-
-    // Default response
-    return {
-      message: 'Here are some suggestions based on your request:',
-      suggestions: [
-        {
-          title: 'Suggested Activity',
-          type: 'activity',
-          duration: 60,
-          description: 'Based on your preferences',
+    const resp = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: prompt,
+        settings,
+        context: {
+          destination,
+          date: day.date,
+          preferences,
+          activities: day.activities,
         },
-      ],
+      }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.error || `HTTP ${resp.status}`);
+    }
+
+    return {
+      message: data.message || 'Here are some suggestions:',
+      suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
     };
   };
 
@@ -205,29 +120,35 @@ export function AIPanel({
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const sentInput = input;
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await generateAISuggestions(input);
-
-      const assistantMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: response.message,
-        suggestions: response.suggestions,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      const response = await callAI(sentInput);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: generateId(),
+          role: 'assistant',
+          content: response.message,
+          suggestions: response.suggestions,
+          timestamp: new Date(),
+        },
+      ]);
     } catch (error) {
-      const errorMessage: Message = {
-        id: generateId(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const isNotConfigured = error instanceof Error && error.message === 'not_configured';
+      setMessages(prev => [
+        ...prev,
+        {
+          id: generateId(),
+          role: 'assistant',
+          content: isNotConfigured
+            ? 'AI is not configured yet. Go to Settings to connect SAP AI Core.'
+            : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +156,46 @@ export function AIPanel({
 
   const handleQuickPrompt = (prompt: string) => {
     setInput(prompt);
-    handleSend();
+    // Use a small delay so the input value is set before handleSend reads it
+    setTimeout(() => {
+      setMessages(prev => [
+        ...prev,
+        { id: generateId(), role: 'user', content: prompt, timestamp: new Date() },
+      ]);
+      setInput('');
+      setIsLoading(true);
+
+      callAI(prompt)
+        .then(response => {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: generateId(),
+              role: 'assistant',
+              content: response.message,
+              suggestions: response.suggestions,
+              timestamp: new Date(),
+            },
+          ]);
+        })
+        .catch(error => {
+          const isNotConfigured = error instanceof Error && error.message === 'not_configured';
+          setMessages(prev => [
+            ...prev,
+            {
+              id: generateId(),
+              role: 'assistant',
+              content: isNotConfigured
+                ? 'AI is not configured. Go to Settings → Intelligence to connect SAP AI Core.'
+                : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
+              timestamp: new Date(),
+            },
+          ]);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    }, 50);
   };
 
   const handleAddSuggestion = (suggestion: Partial<Activity>) => {
@@ -273,13 +233,16 @@ export function AIPanel({
   return (
     <div className={`ai-panel ${isExpanded ? 'expanded' : 'collapsed'} ${isFloating ? 'floating' : ''}`}>
       {!isFloating && (
-        <button 
+        <button
           className="panel-toggle"
           onClick={() => setIsExpanded(!isExpanded)}
         >
           <div className="toggle-content">
             <Sparkles size={18} />
             <span>AI Assistant</span>
+            {!aiConfigured && (
+              <span className="unconfigured-badge">Not configured</span>
+            )}
           </div>
           {isExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
         </button>
@@ -287,6 +250,18 @@ export function AIPanel({
 
       {(isExpanded || isFloating) && (
         <div className="panel-content">
+          {/* Not-configured banner */}
+          {!aiConfigured && (
+            <div className="config-banner">
+              <Sparkles size={15} />
+              <span>Connect SAP AI Core to enable real intelligence.</span>
+              <button className="config-link" onClick={() => router.push('/settings')}>
+                <Settings size={13} />
+                Settings
+              </button>
+            </div>
+          )}
+
           {/* Quick Prompts */}
           {messages.length === 0 && (
             <div className="quick-prompts">
@@ -296,10 +271,7 @@ export function AIPanel({
                   <button
                     key={index}
                     className="quick-prompt-btn"
-                    onClick={() => {
-                      setInput(item.prompt);
-                      setTimeout(handleSend, 100);
-                    }}
+                    onClick={() => handleQuickPrompt(item.prompt)}
                   >
                     {item.icon}
                     <span>{item.label}</span>
@@ -320,7 +292,7 @@ export function AIPanel({
                 )}
                 <div className="message-content">
                   <p>{message.content}</p>
-                  
+
                   {message.suggestions && message.suggestions.length > 0 && (
                     <div className="suggestions">
                       {message.suggestions.map((suggestion, index) => (
@@ -349,7 +321,7 @@ export function AIPanel({
                           </button>
                         </div>
                       ))}
-                      
+
                       {message.suggestions.length > 1 && (
                         <button
                           className="add-all-btn"
@@ -452,6 +424,56 @@ export function AIPanel({
 
         .toggle-content :global(svg) {
           color: var(--primary);
+        }
+
+        .unconfigured-badge {
+          font-size: 11px;
+          font-weight: 500;
+          padding: 2px 8px;
+          background: color-mix(in srgb, #f59e0b 20%, var(--card));
+          color: #d97706;
+          border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+          border-radius: 999px;
+        }
+
+        .config-banner {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 16px;
+          background: color-mix(in srgb, var(--primary) 8%, var(--card));
+          border-bottom: 1px solid var(--border);
+          font-size: 13px;
+          color: var(--foreground);
+        }
+
+        .config-banner :global(svg) {
+          color: var(--primary);
+          flex-shrink: 0;
+        }
+
+        .config-banner span {
+          flex: 1;
+        }
+
+        .config-link {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 5px 12px;
+          background: var(--primary);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: opacity 0.2s;
+        }
+
+        .config-link:hover {
+          opacity: 0.9;
         }
 
         .panel-content {

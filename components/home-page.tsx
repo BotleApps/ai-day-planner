@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plan } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
-import { ThemeToggle } from '@/components/theme-toggle';
 import {
   Plus,
   Calendar,
@@ -20,6 +20,7 @@ import {
   MoreVertical,
   Star,
   X,
+  Settings,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -35,6 +36,7 @@ const QUICK_TEMPLATES = [
 ];
 
 export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
+  const router = useRouter();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,7 +106,9 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
                 <Search size={20} />
               </button>
             )}
-            <ThemeToggle />
+            <button className="icon-btn" onClick={() => router.push('/settings')} title="Settings">
+              <Settings size={18} />
+            </button>
           </div>
         </div>
         
@@ -322,21 +326,20 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         }
 
         .icon-btn {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
-          border: none;
-          background: var(--muted);
-          color: var(--muted-foreground);
+          width: 38px;
+          height: 38px;
           display: flex;
           align-items: center;
           justify-content: center;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: transparent;
+          color: var(--muted-foreground);
           cursor: pointer;
           transition: all 0.2s;
         }
-
         .icon-btn:hover {
-          background: var(--border);
+          background: var(--muted);
           color: var(--foreground);
         }
 
