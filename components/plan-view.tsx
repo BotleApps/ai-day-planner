@@ -1,16 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plan, DayPlan, Activity, DEFAULT_PREFERENCES } from '@/lib/types';
-import { generateId, sortByTime, formatDate, getDayOfWeek, calculateDayProgress } from '@/lib/utils';
+import { Plan, DayPlan, Activity, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
+import { formatDate, calculateDayProgress, formatDuration } from '@/lib/utils';
 import Timeline from '@/components/timeline';
 import AIPanel from '@/components/ai-panel';
 import ActivityModal from '@/components/activity-modal';
+import ConfirmDialog from '@/components/confirm-dialog';
 import {
   Plus,
-  Calendar,
-  MapPin,
-  Users,
   Share2,
   Settings,
   ChevronLeft,
@@ -22,6 +20,11 @@ import {
   Copy,
   Check,
   Link2,
+  AlignLeft,
+  LayoutList,
+  StickyNote,
+  MapPin,
+  Calendar,
 } from 'lucide-react';
 
 interface PlanViewProps {
@@ -40,6 +43,17 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // View mode: 'timeline' | 'text'
+  const [viewMode, setViewMode] = useState<'timeline' | 'text'>('timeline');
+
+  // Day notes
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [notesValue, setNotesValue] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+
+  // Confirm dialog for plan delete
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Fetch plan
   const fetchPlan = useCallback(async () => {
@@ -68,6 +82,11 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
 
   const selectedDay = plan?.days.find(d => d.id === selectedDayId);
   const selectedDayIndex = plan?.days.findIndex(d => d.id === selectedDayId) ?? 0;
+
+  // Sync notes textarea when selected day changes
+  useEffect(() => {
+    setNotesValue(selectedDay?.notes ?? '');
+  }, [selectedDayId, selectedDay?.notes]);
 
   // Handle adding activity
   const handleAddActivity = useCallback((startTime: string) => {
@@ -197,6 +216,34 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
     }
   };
 
+  // Save day notes
+  const handleSaveNotes = async (notes: string) => {
+    if (!plan || !selectedDayId) return;
+    setNotesSaving(true);
+    try {
+      await fetch('/api/activities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: plan._id,
+          dayId: selectedDayId,
+          notes,
+        }),
+      });
+      await fetchPlan();
+    } finally {
+      setNotesSaving(false);
+    }
+  };
+
+  // Delete plan
+  const handleDeletePlan = async () => {
+    await fetch(`/api/plans?id=${plan!._id}`, { method: 'DELETE' });
+    setShowDeleteConfirm(false);
+    setShowSettingsModal(false);
+    if (onBack) onBack();
+  };
+
   // Replace all activities (from AI)
   const handleReplaceActivities = async (activities: Activity[]) => {
     if (!plan || !selectedDayId) return;
@@ -280,88 +327,141 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
 
   return (
     <div className="plan-view">
-      {/* Compact Header */}
-      <header className="plan-header">
-        <button onClick={onBack} className="back-btn">
-          <ChevronLeft size={20} />
-        </button>
-        
-        <div className="header-center">
-          <h1>{plan.title}</h1>
-          {plan.destination && (
-            <span className="destination">
-              <MapPin size={12} />
-              {plan.destination}
-            </span>
-          )}
-        </div>
-
-        <div className="header-actions">
-          <button className="btn-icon" title="Share" onClick={() => setShowShareModal(true)}>
-            <Share2 size={18} />
+      {/* Sticky top block: header + day strip + progress */}
+      <div className="sticky-top">
+        {/* Compact Header */}
+        <header className="plan-header">
+          <button onClick={onBack} className="back-btn">
+            <ChevronLeft size={20} />
           </button>
-          <button className="btn-icon" title="Settings" onClick={() => setShowSettingsModal(true)}>
-            <Settings size={18} />
-          </button>
-        </div>
-      </header>
 
-      {/* Slim Day Selector */}
-      <div className="day-strip">
-        <button 
-          className="nav-btn"
-          onClick={() => goToDay('prev')}
-          disabled={selectedDayIndex === 0}
-        >
-          <ChevronLeft size={18} />
-        </button>
+          <div className="header-center">
+            <h1>{plan.title}</h1>
+            {plan.destination && (
+              <span className="destination">
+                <MapPin size={12} />
+                {plan.destination}
+              </span>
+            )}
+          </div>
 
-        <div className="days-scroll">
-          {plan.days.map((day) => {
-            const isSelected = day.id === selectedDayId;
-            const isToday = day.date === today;
-            const dayProgress = calculateDayProgress(day);
-            
-            return (
+          <div className="header-actions">
+            {/* View mode toggle */}
+            <div className="view-toggle">
               <button
-                key={day.id}
-                className={`day-pill ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                onClick={() => setSelectedDayId(day.id)}
+                className={`view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
+                onClick={() => setViewMode('timeline')}
+                title="Timeline view"
               >
-                {isToday && <span className="today-dot" />}
-                <span className="day-num">D{day.dayNumber}</span>
-                <span className="day-short">{new Date(day.date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short' })}</span>
-                {dayProgress.total > 0 && (
-                  <span className="day-count">{dayProgress.completed}/{dayProgress.total}</span>
-                )}
+                <LayoutList size={15} />
               </button>
-            );
-          })}
+              <button
+                className={`view-btn ${viewMode === 'text' ? 'active' : ''}`}
+                onClick={() => setViewMode('text')}
+                title="Text view"
+              >
+                <AlignLeft size={15} />
+              </button>
+            </div>
+            <button
+              className={`btn-icon ${showNotesPanel ? 'active' : ''}`}
+              title="Day notes"
+              onClick={() => setShowNotesPanel(v => !v)}
+            >
+              <StickyNote size={16} />
+            </button>
+            <button className="btn-icon" title="Share" onClick={() => setShowShareModal(true)}>
+              <Share2 size={18} />
+            </button>
+            <button className="btn-icon" title="Settings" onClick={() => setShowSettingsModal(true)}>
+              <Settings size={18} />
+            </button>
+          </div>
+        </header>
+
+        {/* Slim Day Selector */}
+        <div className="day-strip">
+          <button
+            className="nav-btn"
+            onClick={() => goToDay('prev')}
+            disabled={selectedDayIndex === 0}
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="days-scroll">
+            {plan.days.map((day) => {
+              const isSelected = day.id === selectedDayId;
+              const isToday = day.date === today;
+              const dayProgress = calculateDayProgress(day);
+
+              return (
+                <button
+                  key={day.id}
+                  className={`day-pill ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                  onClick={() => setSelectedDayId(day.id)}
+                >
+                  {isToday && <span className="today-dot" />}
+                  <span className="day-num">D{day.dayNumber}</span>
+                  <span className="day-short">{new Date(day.date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short' })}</span>
+                  {dayProgress.total > 0 && (
+                    <span className="day-count">{dayProgress.completed}/{dayProgress.total}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            className="nav-btn"
+            onClick={() => goToDay('next')}
+            disabled={selectedDayIndex === plan.days.length - 1}
+          >
+            <ChevronRight size={18} />
+          </button>
         </div>
 
-        <button 
-          className="nav-btn"
-          onClick={() => goToDay('next')}
-          disabled={selectedDayIndex === plan.days.length - 1}
-        >
-          <ChevronRight size={18} />
-        </button>
+        {/* Progress Bar */}
+        {selectedDay && progress.total > 0 && (
+          <div className="day-progress">
+            <CheckCircle2 size={14} />
+            <span>{progress.completed} of {progress.total}</span>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${progress.percentage}%` }} />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Progress Bar */}
-      {selectedDay && progress.total > 0 && (
-        <div className="day-progress">
-          <CheckCircle2 size={14} />
-          <span>{progress.completed} of {progress.total}</span>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${progress.percentage}%` }} />
+      {/* Day Notes Panel */}
+      {showNotesPanel && selectedDay && (
+        <div className="notes-panel">
+          <div className="notes-header">
+            <StickyNote size={14} />
+            <span>Day Summary &amp; Notes</span>
+          </div>
+          <textarea
+            className="notes-textarea"
+            placeholder="Add notes, reminders, or a summary for this day…"
+            value={notesValue}
+            onChange={e => setNotesValue(e.target.value)}
+            rows={3}
+          />
+          <div className="notes-footer">
+            <button
+              className="notes-save-btn"
+              onClick={() => handleSaveNotes(notesValue)}
+              disabled={notesSaving}
+            >
+              {notesSaving ? 'Saving…' : 'Save notes'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Timeline - Main Content */}
+      {/* Main content — Timeline or Text view */}
       <div className="timeline-container">
-        {selectedDay && (
+        {selectedDay && viewMode === 'timeline' && (
           <Timeline
             day={selectedDay}
             onActivityUpdate={handleActivityUpdate}
@@ -371,6 +471,68 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
             onEditActivity={handleEditActivity}
             isEditable={true}
           />
+        )}
+
+        {selectedDay && viewMode === 'text' && (
+          <div className="text-view">
+            <div className="text-day-header">
+              <h2>{selectedDay.title || `Day ${selectedDay.dayNumber}`}</h2>
+              <span className="text-day-date">
+                <Calendar size={13} />
+                {new Date(selectedDay.date + 'T12:00:00').toLocaleDateString('en', {
+                  weekday: 'long', month: 'long', day: 'numeric',
+                })}
+              </span>
+              {selectedDay.notes && (
+                <p className="text-day-notes">{selectedDay.notes}</p>
+              )}
+            </div>
+
+            {selectedDay.activities.length === 0 ? (
+              <p className="text-empty">No activities planned for this day.</p>
+            ) : (
+              <div className="text-activities">
+                {[...selectedDay.activities]
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                  .map((activity) => {
+                    const endH = (() => {
+                      const [h, m] = activity.startTime.split(':').map(Number);
+                      const total = h * 60 + m + activity.duration;
+                      return `${String(Math.floor(total / 60) % 24).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+                    })();
+                    return (
+                      <div key={activity.id} className="text-activity">
+                        <div
+                          className="text-activity-bar"
+                          style={{ background: ACTIVITY_COLORS[activity.type] }}
+                        />
+                        <div className="text-activity-body">
+                          <div className="text-activity-top">
+                            <span className="text-activity-icon">{ACTIVITY_ICONS[activity.type]}</span>
+                            <span className="text-activity-title">{activity.title}</span>
+                            <span className="text-activity-status" data-status={activity.status}>
+                              {activity.status}
+                            </span>
+                          </div>
+                          <div className="text-activity-meta">
+                            <span><Clock size={11} /> {activity.startTime} – {endH}</span>
+                            <span>{formatDuration(activity.duration)}</span>
+                            {activity.location && <span><MapPin size={11} /> {activity.location}</span>}
+                            {activity.cost != null && <span>💰 {activity.cost}</span>}
+                          </div>
+                          {activity.description && (
+                            <p className="text-activity-desc">{activity.description}</p>
+                          )}
+                          {activity.notes && (
+                            <p className="text-activity-notes">📝 {activity.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -534,21 +696,24 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
                 </div>
               </div>
 
-              <button className="danger-btn" onClick={() => {
-                if (confirm('Are you sure you want to delete this plan?')) {
-                  fetch(`/api/plans?id=${plan._id}`, { method: 'DELETE' })
-                    .then(() => {
-                      setShowSettingsModal(false);
-                      if (onBack) onBack();
-                    });
-                }
-              }}>
+              <button className="danger-btn" onClick={() => setShowDeleteConfirm(true)}>
                 Delete Plan
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Delete Plan Confirmation */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Plan"
+        message={`Delete "${plan.title}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        onConfirm={handleDeletePlan}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       <style jsx>{`
         .plan-view {
@@ -558,17 +723,22 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           flex-direction: column;
         }
 
+        /* Sticky top block */
+        .sticky-top {
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          background: var(--card);
+          border-bottom: 1px solid var(--border);
+        }
+
         /* Compact Header */
         .plan-header {
           display: flex;
           align-items: center;
           gap: 12px;
           padding: 12px 16px;
-          background: var(--card);
           border-bottom: 1px solid var(--border);
-          position: sticky;
-          top: 0;
-          z-index: 100;
         }
 
         .back-btn {
@@ -640,8 +810,7 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 12px 8px;
-          background: var(--card);
+          padding: 10px 8px;
           border-bottom: 1px solid var(--border);
         }
 
@@ -749,11 +918,253 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 10px 16px;
-          background: var(--card);
-          border-bottom: 1px solid var(--border);
+          padding: 8px 16px;
           font-size: 12px;
           color: var(--muted-foreground);
+        }
+
+        /* View mode toggle */
+        .view-toggle {
+          display: flex;
+          background: var(--muted);
+          border-radius: 8px;
+          padding: 3px;
+          gap: 2px;
+        }
+
+        .view-btn {
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          border: none;
+          background: none;
+          color: var(--muted-foreground);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .view-btn.active {
+          background: var(--card);
+          color: var(--foreground);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+
+        .btn-icon.active {
+          background: color-mix(in srgb, var(--primary) 15%, transparent);
+          color: var(--primary);
+        }
+
+        /* Notes panel */
+        .notes-panel {
+          background: color-mix(in srgb, var(--accent) 6%, var(--card));
+          border-bottom: 1px solid var(--border);
+          padding: 12px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .notes-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+        }
+
+        .notes-textarea {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          font-size: 14px;
+          background: var(--card);
+          color: var(--foreground);
+          resize: vertical;
+          min-height: 72px;
+          font-family: inherit;
+          line-height: 1.5;
+          box-sizing: border-box;
+        }
+
+        .notes-textarea:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+        }
+
+        .notes-footer {
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .notes-save-btn {
+          padding: 7px 16px;
+          background: var(--primary);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+
+        .notes-save-btn:hover { opacity: 0.88; }
+        .notes-save-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        /* Text view */
+        .text-view {
+          padding: 20px 16px;
+          max-width: 680px;
+          margin: 0 auto;
+          width: 100%;
+        }
+
+        .text-day-header {
+          margin-bottom: 20px;
+        }
+
+        .text-day-header h2 {
+          font-size: 20px;
+          font-weight: 700;
+          margin: 0 0 4px;
+        }
+
+        .text-day-date {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 13px;
+          color: var(--muted-foreground);
+        }
+
+        .text-day-notes {
+          margin: 10px 0 0;
+          font-size: 14px;
+          color: var(--muted-foreground);
+          background: color-mix(in srgb, var(--accent) 8%, var(--card));
+          border-left: 3px solid var(--accent);
+          padding: 8px 12px;
+          border-radius: 0 8px 8px 0;
+          line-height: 1.55;
+        }
+
+        .text-empty {
+          font-size: 14px;
+          color: var(--muted-foreground);
+          text-align: center;
+          padding: 40px 0;
+        }
+
+        .text-activities {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .text-activity {
+          display: flex;
+          gap: 0;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+          background: var(--card);
+        }
+
+        .text-activity-bar {
+          width: 5px;
+          flex-shrink: 0;
+        }
+
+        .text-activity-body {
+          flex: 1;
+          padding: 12px 14px;
+          min-width: 0;
+        }
+
+        .text-activity-top {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+
+        .text-activity-icon {
+          font-size: 16px;
+          flex-shrink: 0;
+        }
+
+        .text-activity-title {
+          font-size: 15px;
+          font-weight: 600;
+          flex: 1;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .text-activity-status {
+          font-size: 11px;
+          padding: 2px 7px;
+          border-radius: 20px;
+          background: var(--muted);
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          flex-shrink: 0;
+          text-transform: capitalize;
+        }
+
+        .text-activity-status[data-status='completed'] {
+          background: color-mix(in srgb, #22c55e 15%, transparent);
+          color: #16a34a;
+        }
+
+        .text-activity-status[data-status='in-progress'] {
+          background: color-mix(in srgb, var(--primary) 15%, transparent);
+          color: var(--primary);
+        }
+
+        .text-activity-status[data-status='skipped'] {
+          background: color-mix(in srgb, #ef4444 10%, transparent);
+          color: #dc2626;
+        }
+
+        .text-activity-meta {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+          font-size: 12px;
+          color: var(--muted-foreground);
+          margin-bottom: 2px;
+        }
+
+        .text-activity-meta span {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+        }
+
+        .text-activity-desc {
+          font-size: 13px;
+          color: var(--muted-foreground);
+          margin: 6px 0 0;
+          line-height: 1.5;
+        }
+
+        .text-activity-notes {
+          font-size: 12px;
+          color: var(--muted-foreground);
+          margin: 4px 0 0;
+          font-style: italic;
         }
 
         .day-progress :global(svg) {

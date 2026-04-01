@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, ActivityType, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
 import { generateId, formatDuration, cn } from '@/lib/utils';
 import {
@@ -72,6 +72,26 @@ export function ActivityModal({
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(aiSuggestions.length > 0);
+
+  // Re-populate form when switching to a different activity for editing
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(
+        editActivity || {
+          title: '',
+          description: '',
+          type: 'activity',
+          startTime: initialTime,
+          duration: 60,
+          location: '',
+          notes: '',
+          cost: undefined,
+        }
+      );
+      setShowSuggestions(aiSuggestions.length > 0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editActivity]);
 
   if (!isOpen) return null;
 

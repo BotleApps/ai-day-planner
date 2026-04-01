@@ -6,7 +6,10 @@ applications:
     instances: 1
     buildpacks:
       - nodejs_buildpack
-    command: node .next/standalone/server.js
+    # Only upload the pre-built standalone output — not the whole project tree.
+    # deploy.sh copies public/ and .next/static/ into here before pushing.
+    path: .next/standalone
+    command: node server.js
     health-check-type: http
     health-check-http-endpoint: /api/health
     env:

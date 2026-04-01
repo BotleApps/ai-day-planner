@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   images: {
+    // Disable built-in image optimisation so the Sharp native module is not
+    // required at runtime — avoids rebuild failures on Cloud Foundry.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
