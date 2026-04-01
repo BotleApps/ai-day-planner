@@ -1,9 +1,44 @@
 import { NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
-import { Activity, DayPlan } from '@/lib/types';
+import prisma from '@/lib/db';
+import { Activity } from '@/lib/types';
 import { generateId, sortByTime } from '@/lib/utils';
 import { auth } from '@/auth';
+
+function shapeActivity(act: any) {
+  return {
+    _id: act.id,
+    id: act.id,
+    title: act.title,
+    description: act.description ?? undefined,
+    type: act.type,
+    startTime: act.startTime,
+    duration: act.duration,
+    endTime: act.endTime ?? undefined,
+    location: act.location ?? undefined,
+    address: act.address ?? undefined,
+    status: act.status,
+    priority: act.priority,
+    notes: act.notes ?? undefined,
+    cost: act.cost ?? undefined,
+    currency: act.currency ?? undefined,
+    weatherDependent: act.weatherDependent,
+    isBreak: act.isBreak,
+    aiSuggested: act.aiSuggested,
+    order: act.order,
+    color: act.color ?? undefined,
+    icon: act.icon ?? undefined,
+  };
+}
+
+// Verify the requesting user can access this plan (owner or public)
+async function getPlanAccess(planId: string, userId: string) {
+  return prisma.plan.findFirst({
+    where: {
+      id: planId,
+      OR: [{ createdBy: userId }, { isPublic: true }],
+    },
+  });
+}
 
 // GET activities for a day
 export async function GET(request: Request) {
@@ -18,41 +53,26 @@ export async function GET(request: Request) {
     const dayId = searchParams.get('dayId');
 
     if (!planId || !dayId) {
-      return NextResponse.json(
-        { error: 'Plan ID and Day ID are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Plan ID and Day ID are required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
-    // Allow access if the user owns the plan OR if the plan has a public share link
-    const plan = await db.collection('plans').findOne({
-      _id: new ObjectId(planId),
-      $or: [
-        { createdBy: session.user.id },
-        { 'sharing.shareLink': { $exists: true, $ne: null } },
-      ],
+    const plan = await getPlanAccess(planId, session.user.id);
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+
+    const day = await prisma.dayPlan.findFirst({
+      where: { id: dayId, planId },
+      include: { activities: { orderBy: { order: 'asc' } } },
     });
+    if (!day) return NextResponse.json({ error: 'Day not found' }, { status: 404 });
 
-    if (!plan) {
-      return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
-    }
-
-    const day = plan.days?.find((d: DayPlan) => d.id === dayId);
-    if (!day) {
-      return NextResponse.json({ error: 'Day not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({
-      activities: sortByTime(day.activities || []),
-    });
+    return NextResponse.json({ activities: sortByTime(day.activities.map(shapeActivity)) });
   } catch (error) {
     console.error('Error fetching activities:', error);
     return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
   }
 }
 
-// POST add activity to a day
+// POST — add activity to a day
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -64,46 +84,53 @@ export async function POST(request: Request) {
     const { planId, dayId, activity } = body;
 
     if (!planId || !dayId || !activity) {
-      return NextResponse.json(
-        { error: 'Plan ID, Day ID, and activity are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Plan ID, Day ID, and activity are required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    // Verify ownership (only owner can add activities)
+    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    const newActivity: Activity = {
-      ...activity,
-      id: activity.id || generateId(),
-      status: activity.status || 'planned',
-      order: activity.order ?? 0,
-    };
+    const day = await prisma.dayPlan.findFirst({ where: { id: dayId, planId } });
+    if (!day) return NextResponse.json({ error: 'Day not found' }, { status: 404 });
 
-    const result = await db.collection('plans').updateOne(
-      {
-        _id: new ObjectId(planId),
-        createdBy: session.user.id,
-        'days.id': dayId,
+    const newActivity = await prisma.activity.create({
+      data: {
+        id: activity.id || generateId(),
+        dayPlanId: dayId,
+        title: activity.title || 'Activity',
+        description: activity.description,
+        type: activity.type || 'activity',
+        startTime: activity.startTime || '09:00',
+        duration: activity.duration || 60,
+        endTime: activity.endTime,
+        location: activity.location,
+        address: activity.address,
+        status: activity.status || 'planned',
+        priority: activity.priority || 'medium',
+        notes: activity.notes,
+        cost: activity.cost,
+        currency: activity.currency,
+        weatherDependent: activity.weatherDependent || false,
+        isBreak: activity.isBreak || false,
+        aiSuggested: activity.aiSuggested || false,
+        order: activity.order ?? 0,
+        color: activity.color,
+        icon: activity.icon,
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {
-        $push: { 'days.$.activities': newActivity },
-        $set: { updatedAt: new Date() },
-      } as any
-    );
+    });
 
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: 'Plan or day not found' }, { status: 404 });
-    }
+    // Touch plan updatedAt
+    await prisma.plan.update({ where: { id: planId }, data: { updatedAt: new Date() } });
 
-    return NextResponse.json({ activity: newActivity });
+    return NextResponse.json({ activity: shapeActivity(newActivity) });
   } catch (error) {
     console.error('Error adding activity:', error);
     return NextResponse.json({ error: 'Failed to add activity' }, { status: 500 });
   }
 }
 
-// PUT update activity
+// PUT — update a single activity
 export async function PUT(request: Request) {
   try {
     const session = await auth();
@@ -115,34 +142,33 @@ export async function PUT(request: Request) {
     const { planId, dayId, activityId, updates } = body;
 
     if (!planId || !dayId || !activityId) {
-      return NextResponse.json(
-        { error: 'Plan ID, Day ID, and Activity ID are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Plan ID, Day ID, and Activity ID are required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    const updateFields: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(updates)) {
-      updateFields[`days.$[day].activities.$[activity].${key}`] = value;
+    // Build safe update object (only known scalar fields)
+    const data: Record<string, any> = {};
+    const allowed = [
+      'title', 'description', 'type', 'startTime', 'duration', 'endTime',
+      'location', 'address', 'status', 'priority', 'notes', 'cost',
+      'currency', 'weatherDependent', 'isBreak', 'aiSuggested', 'order', 'color', 'icon',
+    ];
+    for (const key of allowed) {
+      if (updates && key in updates) data[key] = updates[key];
     }
-    updateFields['updatedAt'] = new Date();
-
-    const result = await db.collection('plans').updateOne(
-      { _id: new ObjectId(planId), createdBy: session.user.id },
-      { $set: updateFields },
-      {
-        arrayFilters: [
-          { 'day.id': dayId },
-          { 'activity.id': activityId },
-        ],
-      }
-    );
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    // Allow full activity replacement (from onActivityUpdate which passes the whole object)
+    if (!updates && body.activityId) {
+      // updates might be the whole activity
     }
+
+    await prisma.activity.updateMany({
+      where: { id: activityId, dayPlanId: dayId },
+      data,
+    });
+
+    await prisma.plan.update({ where: { id: planId }, data: { updatedAt: new Date() } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -151,7 +177,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// DELETE activity
+// DELETE — remove an activity
 export async function DELETE(request: Request) {
   try {
     const session = await auth();
@@ -165,30 +191,15 @@ export async function DELETE(request: Request) {
     const activityId = searchParams.get('activityId');
 
     if (!planId || !dayId || !activityId) {
-      return NextResponse.json(
-        { error: 'Plan ID, Day ID, and Activity ID are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Plan ID, Day ID, and Activity ID are required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    const result = await db.collection('plans').updateOne(
-      {
-        _id: new ObjectId(planId),
-        createdBy: session.user.id,
-        'days.id': dayId,
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {
-        $pull: { 'days.$.activities': { id: activityId } },
-        $set: { updatedAt: new Date() },
-      } as any
-    );
+    await prisma.activity.deleteMany({ where: { id: activityId, dayPlanId: dayId } });
 
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: 'Plan or day not found' }, { status: 404 });
-    }
+    await prisma.plan.update({ where: { id: planId }, data: { updatedAt: new Date() } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -197,7 +208,7 @@ export async function DELETE(request: Request) {
   }
 }
 
-// PATCH - Bulk update activities (for reordering, replacing all)
+// PATCH — bulk replace/reorder activities for a day (also handles notes save)
 export async function PATCH(request: Request) {
   try {
     const session = await auth();
@@ -206,39 +217,57 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { planId, dayId, activities } = body;
+    const { planId, dayId, activities, notes } = body;
 
-    if (!planId || !dayId || !activities) {
-      return NextResponse.json(
-        { error: 'Plan ID, Day ID, and activities are required' },
-        { status: 400 }
-      );
+    if (!planId || !dayId) {
+      return NextResponse.json({ error: 'Plan ID and Day ID are required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    const orderedActivities = activities.map((a: Activity, index: number) => ({
-      ...a,
-      order: index,
-    }));
+    // Save day notes if provided
+    if (notes !== undefined) {
+      await prisma.dayPlan.updateMany({ where: { id: dayId, planId }, data: { notes } });
+    }
 
-    const result = await db.collection('plans').updateOne(
-      {
-        _id: new ObjectId(planId),
-        createdBy: session.user.id,
-        'days.id': dayId,
-      },
-      {
-        $set: {
-          'days.$.activities': sortByTime(orderedActivities),
-          updatedAt: new Date(),
-        },
+    // Bulk replace activities if provided
+    if (activities) {
+      const ordered: Activity[] = sortByTime(activities).map((a: Activity, i: number) => ({ ...a, order: i }));
+
+      // Delete all existing activities for this day and recreate
+      await prisma.activity.deleteMany({ where: { dayPlanId: dayId } });
+
+      if (ordered.length > 0) {
+        await prisma.activity.createMany({
+          data: ordered.map((a: any) => ({
+            id: a.id || generateId(),
+            dayPlanId: dayId,
+            title: a.title || 'Activity',
+            description: a.description,
+            type: a.type || 'activity',
+            startTime: a.startTime || '09:00',
+            duration: a.duration || 60,
+            endTime: a.endTime,
+            location: a.location,
+            address: a.address,
+            status: a.status || 'planned',
+            priority: a.priority || 'medium',
+            notes: a.notes,
+            cost: a.cost,
+            currency: a.currency,
+            weatherDependent: a.weatherDependent || false,
+            isBreak: a.isBreak || false,
+            aiSuggested: a.aiSuggested || false,
+            order: a.order,
+            color: a.color,
+            icon: a.icon,
+          })),
+        });
       }
-    );
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: 'Plan or day not found' }, { status: 404 });
     }
+
+    await prisma.plan.update({ where: { id: planId }, data: { updatedAt: new Date() } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

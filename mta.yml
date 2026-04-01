@@ -1,0 +1,30 @@
+_schema-version: "3.3.0"
+ID: ai-day-planner
+version: 1.0.0
+description: AI Day Planner — SAP BTP Cloud Foundry deployment
+
+modules:
+  - name: ai-day-planner
+    type: nodejs
+    path: .next/standalone
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      instances: 1
+      buildpack: nodejs_buildpack
+      health-check-type: http
+      health-check-http-endpoint: /api/health
+      command: node server.js
+    properties:
+      NODE_ENV: production
+    requires:
+      - name: ai-day-planner-db
+
+resources:
+  - name: ai-day-planner-db
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: postgresql-db
+      service-plan: development
+      config:
+        engine: postgres

@@ -482,6 +482,12 @@ export function AIPanel({
           height: 400px;
         }
 
+        @media (max-width: 480px) {
+          .panel-content {
+            height: 55vh;
+          }
+        }
+
         .quick-prompts {
           padding: 16px;
           border-bottom: 1px solid var(--border);
@@ -553,7 +559,7 @@ export function AIPanel({
         }
 
         .message-content {
-          max-width: 80%;
+          max-width: 85%;
           padding: 12px 16px;
           background: var(--muted);
           border-radius: 12px;
@@ -724,6 +730,26 @@ export function AIPanel({
         @media (max-width: 640px) {
           .prompts-grid {
             grid-template-columns: 1fr;
+          }
+
+          .quick-prompt-btn {
+            padding: 12px 14px;
+            font-size: 14px;
+          }
+
+          .input-area input {
+            font-size: 16px; /* Prevents iOS zoom on focus */
+          }
+
+          .config-banner {
+            flex-wrap: wrap;
+            gap: 6px;
+          }
+        }
+
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+          .input-area {
+            padding-bottom: calc(16px + env(safe-area-inset-bottom));
           }
         }
       `}</style>

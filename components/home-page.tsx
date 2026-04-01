@@ -407,7 +407,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           flex: 1;
           border: none;
           background: none;
-          font-size: 15px;
+          font-size: 16px; /* Prevents iOS auto-zoom */
           color: var(--foreground);
           outline: none;
         }
@@ -830,6 +830,37 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
 
           .progress-bar {
             flex: 1;
+          }
+
+          .empty-state h1 {
+            font-size: 22px;
+          }
+
+          .plans-header h2 {
+            font-size: 18px;
+          }
+
+          .template-chips {
+            gap: 8px;
+          }
+
+          .template-chip {
+            padding: 9px 13px;
+            font-size: 13px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .header-content {
+            padding: 10px 12px;
+          }
+
+          .logo {
+            font-size: 16px;
+          }
+
+          .plans-view {
+            padding: 12px;
           }
         }
       `}</style>

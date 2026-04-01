@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   // Tell Next.js/Turbopack NOT to bundle these Node.js packages — load them
   // natively at runtime so their internal require() paths aren't mangled.
-  serverExternalPackages: ['pdf-parse', 'officeparser', 'pdfjs-dist'],
+  serverExternalPackages: ['@prisma/client', 'prisma', '.prisma', '.prisma/client', '@prisma/adapter-pg', 'pg', 'pdf-parse', 'officeparser', 'pdfjs-dist'],
   // Turbopack configuration
   turbopack: {
     root: path.resolve(__dirname),

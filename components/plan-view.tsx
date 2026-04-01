@@ -1191,7 +1191,7 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
         .timeline-container {
           flex: 1;
           overflow-y: auto;
-          padding-bottom: 100px;
+          padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
         }
 
         /* Floating Action Buttons */
@@ -1513,6 +1513,37 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           .fab-ai {
             bottom: 32px;
             right: 104px;
+          }
+        }
+
+        /* Mobile-specific header adjustments */
+        @media (max-width: 400px) {
+          .header-actions {
+            gap: 4px;
+          }
+
+          .btn-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+          }
+
+          .view-toggle {
+            padding: 2px;
+          }
+
+          .view-btn {
+            width: 24px;
+            height: 24px;
+          }
+
+          .header-center h1 {
+            font-size: 15px;
+          }
+
+          .day-pill {
+            padding: 6px 10px;
+            font-size: 12px;
           }
         }
 

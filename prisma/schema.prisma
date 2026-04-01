@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  destination String   @default("")
+  coverImage  String   @default("")
+  status      String   @default("draft")
+  startDate   String
+  endDate     String
+  createdBy   String
+  shareLink   String?  @unique
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Preferences (flattened)
+  wakeUpTime           String  @default("07:00")
+  sleepTime            String  @default("22:00")
+  pace                 String  @default("moderate")
+  breakFrequency       Int     @default(120)
+  breakDuration        Int     @default(15)
+  travelBuffer         Int     @default(30)
+  mealBreakfast        String?
+  mealLunch            String?
+  mealDinner           String?
+  activityTypes        String[] @default([])
+  accessibility        String[] @default([])
+  dietaryRestrictions  String[] @default([])
+  interests            String[] @default([])
+
+  days DayPlan[]
+
+  @@index([createdBy])
+  @@index([shareLink])
+}
+
+model DayPlan {
+  id          String  @id @default(cuid())
+  planId      String
+  date        String
+  dayNumber   Int
+  title       String?
+  description String?
+  notes       String?
+  startTime   String?
+  endTime     String?
+
+  plan       Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@index([planId])
+}
+
+model Activity {
+  id              String   @id @default(cuid())
+  dayPlanId       String
+  title           String
+  description     String?
+  type            String   @default("activity")
+  startTime       String
+  duration        Int
+  endTime         String?
+  location        String?
+  address         String?
+  status          String   @default("planned")
+  priority        String   @default("medium")
+  notes           String?
+  cost            Float?
+  currency        String?
+  weatherDependent Boolean @default(false)
+  isBreak         Boolean  @default(false)
+  aiSuggested     Boolean  @default(false)
+  order           Int      @default(0)
+  color           String?
+  icon            String?
+
+  dayPlan DayPlan @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
+
+  @@index([dayPlanId])
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String   @default("")
+  time        String?
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}

@@ -2,8 +2,9 @@
 # =============================================================================
 # deploy.sh — Deploy AI Day Planner to SAP BTP Cloud Foundry
 #
-# Static config (CF_API, CF_ORG, CF_SPACE, CF_APP_URL) is read from .env.local.
-# The script checks for a valid CF session and does `cf login --sso` if needed.
+# Uses PostgreSQL on SAP BTP (bound via CF service binding).
+# DATABASE_URL is derived from the CF service binding credentials.
+# Migrations run inside CF as a task (the DB is not reachable from local).
 #
 # Usage:
 #   chmod +x deploy.sh
@@ -25,15 +26,14 @@ log "CF CLI: $(cf version | head -1)"
 ENV_FILE=".env.local"
 [ -f "$ENV_FILE" ] || die "$ENV_FILE not found. Copy .env.example → .env.local and fill in values."
 
-# Export every non-comment, non-empty line
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
 
 # ── 3. Validate required variables ───────────────────────────────────────────
-for var in CF_API CF_ORG CF_SPACE CF_APP_URL \
-           MONGODB_URI NEXTAUTH_SECRET NEXTAUTH_URL \
+for var in CF_API CF_ORG CF_SPACE CF_APP_URL CF_DB_SERVICE_NAME \
+           NEXTAUTH_SECRET NEXTAUTH_URL \
            GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
   [ -n "${!var:-}" ] || die "$var is not set in $ENV_FILE"
 done
@@ -41,21 +41,63 @@ done
 log "Target: $CF_API  |  Org: $CF_ORG  |  Space: $CF_SPACE"
 
 # ── 4. Check for a valid CF session, login only if needed ─────────────────────
-# Try targeting the org/space first — if the token is still valid this succeeds
-# without touching the API endpoint (which can invalidate tokens).
 if cf target -o "$CF_ORG" -s "$CF_SPACE" > /dev/null 2>&1; then
   log "Already authenticated. Using existing session."
 else
-  # Set API endpoint only when we actually need to (re-)authenticate
   cf api "$CF_API" --skip-ssl-validation 2>/dev/null || cf api "$CF_API"
   warn "No valid CF session found. Starting SSO login..."
   echo ""
   cf login --sso -a "$CF_API" -o "$CF_ORG" -s "$CF_SPACE"
 fi
 
-# ── 6. Build ─────────────────────────────────────────────────────────────────
+# ── 5. Ensure PostgreSQL service exists ───────────────────────────────────────
+if cf service "$CF_DB_SERVICE_NAME" > /dev/null 2>&1; then
+  log "PostgreSQL service '$CF_DB_SERVICE_NAME' already exists."
+else
+  log "Creating PostgreSQL service '$CF_DB_SERVICE_NAME' (plan: development)..."
+  cf create-service postgresql-db development "$CF_DB_SERVICE_NAME"
+  log "Waiting for service to be ready..."
+  for i in $(seq 1 30); do
+    STATUS=$(cf service "$CF_DB_SERVICE_NAME" | grep -i "status:" | awk '{print $2}' || true)
+    [ "$STATUS" = "create" ] && sleep 10 || break
+  done
+fi
+
+# ── 6. Extract DATABASE_URL from CF service key ───────────────────────────────
+# The RDS instance is inside the CF private network — not reachable from local.
+# We still extract the URL here so we can pass it as an env var to the app.
+# Migrations will run as a CF task (step 12) where the DB is reachable.
+SERVICE_KEY="${CF_DB_SERVICE_NAME}-deploy-key"
+cf create-service-key "$CF_DB_SERVICE_NAME" "$SERVICE_KEY" 2>/dev/null || true
+# Skip the CF CLI header line(s) to get pure JSON
+DB_CREDS=$(cf service-key "$CF_DB_SERVICE_NAME" "$SERVICE_KEY" | tail -n +3)
+
+DATABASE_URL=$(echo "$DB_CREDS" | node -e "
+let d='';
+process.stdin.on('data',c=>d+=c).on('end',()=>{
+  const j=JSON.parse(d);
+  // SAP BTP wraps fields under 'credentials'; some services return flat JSON
+  const cr=j.credentials||j;
+  // Use a ready-made uri/url if provided
+  if(cr.uri)  { console.log(cr.uri); return; }
+  if(cr.url)  { console.log(cr.url); return; }
+  const host=cr.hostname||cr.host;
+  const port=cr.port||5432;
+  const name=cr.dbname||cr.name||cr.database||cr.db;
+  const user=cr.username||cr.user;
+  const pass=encodeURIComponent(cr.password||'');
+  console.log('postgresql://'+user+':'+pass+'@'+host+':'+port+'/'+name+'?sslmode=require');
+});
+")
+export DATABASE_URL
+log "Database URL derived from service binding."
+
+# ── 7. Build ──────────────────────────────────────────────────────────────────
 log "Installing dependencies..."
 npm ci --prefer-offline 2>/dev/null || npm ci
+
+log "Generating Prisma client..."
+npx prisma generate
 
 log "Building Next.js (standalone)..."
 npm run build
@@ -66,14 +108,23 @@ log "Copying static assets into standalone..."
 cp -r public .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
 
-# ── 6b. Strip native-only modules & write a minimal package.json ─────────────
-# Next.js standalone traces node_modules but does NOT include build/install
-# scripts for native modules like sharp. The CF nodejs_buildpack runs
-# `npm rebuild` on vendored node_modules, which fails when those scripts are
-# missing. Fix: physically remove native modules we don't need at runtime
-# (image optimisation is disabled via next.config.ts) and replace the
-# package.json with a minimal one so the buildpack doesn't try to install or
-# rebuild anything.
+# Copy Prisma client + CLI into standalone (CLI is needed for the migrate task)
+log "Copying Prisma into standalone..."
+cp -r node_modules/.prisma     .next/standalone/node_modules/.prisma     2>/dev/null || true
+cp -r node_modules/@prisma     .next/standalone/node_modules/@prisma     2>/dev/null || true
+cp -r node_modules/prisma      .next/standalone/node_modules/prisma      2>/dev/null || true
+mkdir -p .next/standalone/prisma
+cp -r prisma/migrations        .next/standalone/prisma/migrations         2>/dev/null || true
+cp    prisma/schema.prisma     .next/standalone/prisma/schema.prisma      2>/dev/null || true
+cp    prisma.config.ts         .next/standalone/prisma.config.ts          2>/dev/null || true
+
+# Copy pg driver and adapter (required for Prisma 7 WASM client engine)
+log "Copying pg driver into standalone..."
+cp -r node_modules/pg          .next/standalone/node_modules/pg          2>/dev/null || true
+cp -r node_modules/pg-pool     .next/standalone/node_modules/pg-pool     2>/dev/null || true
+cp -r node_modules/pg-protocol .next/standalone/node_modules/pg-protocol 2>/dev/null || true
+cp -r node_modules/pg-types    .next/standalone/node_modules/pg-types    2>/dev/null || true
+cp -r node_modules/pgpass      .next/standalone/node_modules/pgpass      2>/dev/null || true
 
 log "Removing native modules not needed at runtime (sharp, @img, SWC)..."
 rm -rf .next/standalone/node_modules/sharp \
@@ -81,28 +132,26 @@ rm -rf .next/standalone/node_modules/sharp \
        .next/standalone/node_modules/@next/swc-* \
        .next/standalone/node_modules/@swc
 
-# Replace the standalone package.json with a minimal stub — NO dependencies.
-# The CF nodejs_buildpack runs `npm install` on whatever package.json it finds.
-# If dependencies are listed it will overwrite or conflict with the already-
-# vendored node_modules that Next.js standalone bundled at build time.
-# With no dependencies, `npm install` is a no-op and the vendored modules stay.
-# Also remove package-lock.json because `npm ci` would delete node_modules first.
 node -e "
+  const fs = require('fs');
+  const nextPkg = JSON.parse(fs.readFileSync('./node_modules/next/package.json', 'utf8'));
   const stub = {
     name: 'ai-day-planner',
     version: '1.0.0',
     private: true,
-    engines: { node: '20.x' }
+    engines: { node: '20.x' },
+    dependencies: { next: nextPkg.version },
+    scripts: {}
   };
-  require('fs').writeFileSync(
-    './.next/standalone/package.json',
-    JSON.stringify(stub, null, 2) + '\n'
-  );
+  fs.writeFileSync('./.next/standalone/package.json', JSON.stringify(stub, null, 2) + '\n');
 "
 rm -f .next/standalone/package-lock.json
-log "Wrote minimal standalone/package.json (no deps — buildpack npm install is a no-op)"
+log "Wrote minimal standalone/package.json"
 
-# Write a .cfignore as a safety net (prevents re-uploading if dirs re-appear).
+cat > .next/standalone/.npmrc <<'EOF'
+ignore-scripts=true
+EOF
+
 cat > .next/standalone/.cfignore <<'EOF'
 node_modules/@next/swc-*
 node_modules/@swc/
@@ -110,26 +159,58 @@ node_modules/sharp
 node_modules/@img/
 EOF
 
-# ── 7. Push (no-start) ───────────────────────────────────────────────────────
-log "Pushing to CF..."
-cf push --no-start
+# ── 8. Push (no-start) ───────────────────────────────────────────────────────
+APP_NAME="ai-day-planner"
+log "Pushing $APP_NAME to CF (no-start)..."
+cf push "$APP_NAME" \
+  --no-start \
+  -p .next/standalone \
+  -b nodejs_buildpack \
+  -m 512M \
+  -k 1024M \
+  --health-check-type http \
+  --endpoint /api/health \
+  -c "node server.js"
 
-# Detect app name from manifest
-APP_NAME=$(grep -E '^\s*- name:' manifest.yml | head -1 | sed 's/.*name: *//' | tr -d '[:space:]')
-[ -n "$APP_NAME" ] || die "Could not read app name from manifest.yml"
-log "App: $APP_NAME"
+# ── 9. Bind PostgreSQL service ────────────────────────────────────────────────
+log "Binding PostgreSQL service..."
+cf bind-service "$APP_NAME" "$CF_DB_SERVICE_NAME" 2>/dev/null || log "Service already bound."
 
-# ── 8. Set environment variables ─────────────────────────────────────────────
-# Override NEXTAUTH_URL with the public CF app URL (not localhost).
+# ── 10. Set environment variables ─────────────────────────────────────────────
 log "Setting environment variables..."
 cf set-env "$APP_NAME" NODE_ENV             production
-cf set-env "$APP_NAME" MONGODB_URI          "$MONGODB_URI"
+cf set-env "$APP_NAME" DATABASE_URL         "$DATABASE_URL"
 cf set-env "$APP_NAME" NEXTAUTH_SECRET      "$NEXTAUTH_SECRET"
 cf set-env "$APP_NAME" NEXTAUTH_URL         "$CF_APP_URL"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_ID     "$GOOGLE_CLIENT_ID"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
 
-# ── 9. Start ──────────────────────────────────────────────────────────────────
+# ── 11. Run Prisma migrations as a CF task ────────────────────────────────────
+# The DB is inside CF's private network — only reachable from within CF.
+# We run `prisma migrate deploy` as a one-off task before starting the app.
+log "Running Prisma migrations as CF task..."
+TASK_NAME="prisma-migrate-$(date +%s)"
+cf run-task "$APP_NAME" \
+  --command "node node_modules/prisma/build/index.js migrate deploy" \
+  --name "$TASK_NAME" \
+  -m 256M
+
+log "Waiting for migration task to complete..."
+for i in $(seq 1 30); do
+  TASK_STATE=$(cf tasks "$APP_NAME" | grep "$TASK_NAME" | awk '{print $3}' || true)
+  if [ "$TASK_STATE" = "SUCCEEDED" ]; then
+    log "Migrations complete."
+    break
+  elif [ "$TASK_STATE" = "FAILED" ]; then
+    warn "Migration task failed. Check logs: cf logs $APP_NAME --recent"
+    warn "You may need to run migrations manually. Continuing with app start..."
+    break
+  fi
+  log "Migration task state: ${TASK_STATE:-pending}... (${i}/30)"
+  sleep 5
+done
+
+# ── 12. Start ─────────────────────────────────────────────────────────────────
 log "Starting $APP_NAME..."
 cf start "$APP_NAME"
 
@@ -144,4 +225,5 @@ echo -e "  ${YELLOW}$CF_APP_URL/api/auth/callback/google${NC}"
 echo ""
 log "Useful commands:"
 echo "  cf logs $APP_NAME --recent"
-echo "  cf app  $APP_NAME"
+echo "  cf tasks $APP_NAME"
+echo "  cf app   $APP_NAME"

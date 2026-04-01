@@ -323,7 +323,7 @@ export function Timeline({
           right: 0;
           height: 1px;
           background: var(--border);
-          width: calc(100vw - 60px);
+          width: 100%;
         }
 
         .timeline-half-hour-line {
@@ -334,7 +334,7 @@ export function Timeline({
           height: 1px;
           background: var(--border);
           opacity: 0.4;
-          width: calc(100vw - 60px);
+          width: 100%;
         }
 
         .timeline-activities {
@@ -408,8 +408,8 @@ export function Timeline({
         /* Clean Activity Card Styles */
         .activity-card {
           position: absolute;
-          left: 12px;
-          right: 12px;
+          left: 4px;
+          right: 4px;
           background: var(--card);
           border-radius: 10px;
           border: 1px solid var(--border);
@@ -419,6 +419,8 @@ export function Timeline({
           transition: all 0.15s ease;
           overflow: hidden;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
         }
 
         .activity-card:hover {

@@ -324,20 +324,40 @@ export function ActivityModal({
           background: rgba(0, 0, 0, 0.5);
           backdrop-filter: blur(4px);
           display: flex;
-          align-items: center;
+          align-items: flex-end;
           justify-content: center;
           z-index: 1000;
-          padding: 20px;
+          padding: 0;
         }
 
         .modal-content {
           background: var(--card);
-          border-radius: 20px;
+          border-radius: 20px 20px 0 0;
           width: 100%;
-          max-width: 500px;
-          max-height: 90vh;
+          max-width: 100%;
+          max-height: 92vh;
           overflow-y: auto;
-          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 -4px 40px rgba(0, 0, 0, 0.2);
+          animation: slideUp 0.25s ease;
+        }
+
+        @keyframes slideUp {
+          from { transform: translateY(30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (min-width: 640px) {
+          .modal-overlay {
+            align-items: center;
+            padding: 20px;
+          }
+
+          .modal-content {
+            border-radius: 20px;
+            max-width: 500px;
+            max-height: 90vh;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+          }
         }
 
         .modal-header {
@@ -468,10 +488,17 @@ export function ActivityModal({
           padding: 12px 14px;
           border: 1px solid var(--border);
           border-radius: 10px;
-          font-size: 14px;
+          font-size: 16px; /* Prevents iOS auto-zoom on focus */
           background: var(--background);
           color: var(--foreground);
           transition: all 0.2s ease;
+          -webkit-appearance: none;
+        }
+
+        @media (min-width: 640px) {
+          input, select, textarea {
+            font-size: 14px;
+          }
         }
 
         input:focus, select:focus, textarea:focus {
@@ -611,6 +638,16 @@ export function ActivityModal({
 
           .type-dropdown {
             grid-template-columns: 1fr;
+          }
+
+          form {
+            padding: 16px;
+          }
+        }
+
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+          form {
+            padding-bottom: calc(24px + env(safe-area-inset-bottom));
           }
         }
       `}</style>

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import prisma from '@/lib/db';
 import { auth } from '@/auth';
 
 export async function GET() {
@@ -10,13 +9,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized', tasks: [] }, { status: 401 });
     }
 
-    const db = await getDatabase();
-    const tasks = await db.collection('tasks')
-      .find({ userId: session.user.id })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const tasks = await prisma.task.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    return NextResponse.json({ tasks });
+    return NextResponse.json({ tasks: tasks.map(t => ({ ...t, _id: t.id })) });
   } catch (error) {
     console.error('Error fetching tasks:', error);
     return NextResponse.json({ error: 'Failed to fetch tasks', tasks: [] }, { status: 500 });
@@ -37,21 +35,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    const task = await prisma.task.create({
+      data: {
+        userId: session.user.id,
+        title,
+        description: description || '',
+        time: time || null,
+        completed: completed || false,
+      },
+    });
 
-    const task = {
-      userId: session.user.id,
-      title,
-      description: description || '',
-      time: time || null,
-      completed: completed || false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const result = await db.collection('tasks').insertOne(task);
-
-    return NextResponse.json({ task: { ...task, _id: result.insertedId } });
+    return NextResponse.json({ task: { ...task, _id: task.id } });
   } catch (error) {
     console.error('Error creating task:', error);
     return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
@@ -72,20 +66,18 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
+    const data: Record<string, unknown> = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (time !== undefined) data.time = time;
+    if (completed !== undefined) data.completed = completed;
 
-    const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (title !== undefined) updateData.title = title;
-    if (description !== undefined) updateData.description = description;
-    if (time !== undefined) updateData.time = time;
-    if (completed !== undefined) updateData.completed = completed;
+    const result = await prisma.task.updateMany({
+      where: { id, userId: session.user.id },
+      data,
+    });
 
-    const result = await db.collection('tasks').updateOne(
-      { _id: new ObjectId(id), userId: session.user.id },
-      { $set: updateData }
-    );
-
-    if (result.matchedCount === 0) {
+    if (result.count === 0) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
@@ -110,14 +102,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
     }
 
-    const db = await getDatabase();
-
-    const result = await db.collection('tasks').deleteOne({
-      _id: new ObjectId(id),
-      userId: session.user.id,
+    const result = await prisma.task.deleteMany({
+      where: { id, userId: session.user.id },
     });
 
-    if (result.deletedCount === 0) {
+    if (result.count === 0) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
