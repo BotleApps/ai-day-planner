@@ -108,6 +108,9 @@ log "Copying static assets into standalone..."
 cp -r public .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
 
+# Copy migration runner (standalone JS script — no Prisma CLI needed)
+cp migrate-runner.js .next/standalone/migrate-runner.js
+
 # Copy Prisma client + CLI into standalone (CLI is needed for the migrate task)
 log "Copying Prisma into standalone..."
 cp -r node_modules/.prisma     .next/standalone/node_modules/.prisma     2>/dev/null || true
@@ -126,6 +129,49 @@ cp -r node_modules/pg-protocol .next/standalone/node_modules/pg-protocol 2>/dev/
 cp -r node_modules/pg-types    .next/standalone/node_modules/pg-types    2>/dev/null || true
 cp -r node_modules/pgpass      .next/standalone/node_modules/pgpass      2>/dev/null || true
 
+# Turbopack appends a content-hash to scoped package names in the bundle (e.g.
+# @prisma/adapter-pg-<hash>). Scan the built chunks and create alias directories
+# in standalone/node_modules so Node can resolve the hashed names at runtime.
+log "Creating Turbopack hash aliases in standalone node_modules..."
+node -e "
+const fs   = require('fs');
+const path = require('path');
+const chunksDir = '.next/server/chunks';
+const modDir    = '.next/standalone/node_modules';
+
+// Find all hashed @-scoped package names used in the bundle
+const seen = new Set();
+for (const f of fs.readdirSync(chunksDir)) {
+  if (!f.endsWith('.js')) continue;
+  const src = fs.readFileSync(path.join(chunksDir, f), 'utf8');
+  const re = /[\"'](@[^/\"']+\/[^\"']*)-([0-9a-f]{16})[\"']/g;
+  let m;
+  while ((m = re.exec(src)) !== null) seen.add(m[0].slice(1,-1));
+}
+
+for (const hashed of seen) {
+  // Strip the trailing -<hex> to get the real package name
+  const real = hashed.replace(/-[0-9a-f]{16,}$/, '');
+  // Resolve scope dir (e.g. @prisma)
+  const [scope, pkg] = real.split('/');
+  const realDir  = path.join(modDir, scope, pkg);
+  const aliasDir = path.join(modDir, hashed.split('/')[0] ?? '', hashed.includes('/') ? hashed.split('/').slice(1).join('/') : hashed);
+
+  // For scoped packages like @prisma/adapter-pg-<hash>
+  const hashedScope = hashed.split('/')[0];       // '@prisma'
+  const hashedPkg   = hashed.split('/').slice(1).join('/');  // 'adapter-pg-<hash>'
+  const dest        = path.join(modDir, hashedScope, hashedPkg);
+
+  if (!fs.existsSync(realDir)) { console.log('  skip (no source):', real); continue; }
+  if (fs.existsSync(dest))     { console.log('  already exists:', hashed); continue; }
+
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  // Copy the real package dir to the hashed name
+  fs.cpSync(realDir, dest, { recursive: true });
+  console.log('  aliased:', real, '->', hashed);
+}
+"
+
 log "Removing native modules not needed at runtime (sharp, @img, SWC)..."
 rm -rf .next/standalone/node_modules/sharp \
        .next/standalone/node_modules/@img \
@@ -134,13 +180,25 @@ rm -rf .next/standalone/node_modules/sharp \
 
 node -e "
   const fs = require('fs');
-  const nextPkg = JSON.parse(fs.readFileSync('./node_modules/next/package.json', 'utf8'));
+  // Read versions from local node_modules for all packages needed at runtime
+  const v = (pkg) => {
+    try { return JSON.parse(fs.readFileSync('./node_modules/' + pkg + '/package.json', 'utf8')).version; }
+    catch(e) { return '*'; }
+  };
   const stub = {
     name: 'ai-day-planner',
     version: '1.0.0',
     private: true,
     engines: { node: '20.x' },
-    dependencies: { next: nextPkg.version },
+    dependencies: {
+      // Next.js server
+      'next': v('next'),
+      // PostgreSQL driver (for migrate-runner.js and @prisma/adapter-pg)
+      'pg': v('pg'),
+      // Prisma runtime packages (prevent buildpack from pruning them)
+      '@prisma/client':      v('@prisma/client'),
+      '@prisma/adapter-pg':  v('@prisma/adapter-pg'),
+    },
     scripts: {}
   };
   fs.writeFileSync('./.next/standalone/package.json', JSON.stringify(stub, null, 2) + '\n');
@@ -185,34 +243,34 @@ cf set-env "$APP_NAME" NEXTAUTH_URL         "$CF_APP_URL"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_ID     "$GOOGLE_CLIENT_ID"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
 
-# ── 11. Run Prisma migrations as a CF task ────────────────────────────────────
+# ── 11. Start the app ────────────────────────────────────────────────────────
+log "Starting $APP_NAME..."
+cf start "$APP_NAME"
+
+# ── 12. Run Prisma migrations as a CF task ────────────────────────────────────
+# Run AFTER start so the new droplet (with migrate-runner.js) is active.
 # The DB is inside CF's private network — only reachable from within CF.
-# We run `prisma migrate deploy` as a one-off task before starting the app.
 log "Running Prisma migrations as CF task..."
 TASK_NAME="prisma-migrate-$(date +%s)"
 cf run-task "$APP_NAME" \
-  --command "node node_modules/prisma/build/index.js migrate deploy" \
+  --command "node migrate-runner.js" \
   --name "$TASK_NAME" \
   -m 256M
 
 log "Waiting for migration task to complete..."
-for i in $(seq 1 30); do
+for i in $(seq 1 60); do
   TASK_STATE=$(cf tasks "$APP_NAME" | grep "$TASK_NAME" | awk '{print $3}' || true)
   if [ "$TASK_STATE" = "SUCCEEDED" ]; then
     log "Migrations complete."
     break
   elif [ "$TASK_STATE" = "FAILED" ]; then
-    warn "Migration task failed. Check logs: cf logs $APP_NAME --recent"
-    warn "You may need to run migrations manually. Continuing with app start..."
-    break
+    warn "Migration task failed. Checking task logs..."
+    cf logs "$APP_NAME" --recent 2>&1 | grep -A5 "$TASK_NAME" | tail -30
+    die "Migrations failed — fix the issue and redeploy."
   fi
-  log "Migration task state: ${TASK_STATE:-pending}... (${i}/30)"
+  log "Migration task state: ${TASK_STATE:-pending}... (${i}/60)"
   sleep 5
 done
-
-# ── 12. Start ─────────────────────────────────────────────────────────────────
-log "Starting $APP_NAME..."
-cf start "$APP_NAME"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
