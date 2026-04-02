@@ -25,9 +25,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
     resolveAlias: {
-      // Prevent Turbopack from hashing/aliasing Prisma packages
+      // Prevent Turbopack from hashing/aliasing these packages
       '@prisma/client': '@prisma/client',
       '@prisma/adapter-pg': '@prisma/adapter-pg',
+      'pdf-parse': 'pdf-parse',
+      'officeparser': 'officeparser',
     },
   },
   images: {

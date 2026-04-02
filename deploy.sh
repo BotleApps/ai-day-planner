@@ -129,9 +129,14 @@ cp -r node_modules/pg-protocol .next/standalone/node_modules/pg-protocol 2>/dev/
 cp -r node_modules/pg-types    .next/standalone/node_modules/pg-types    2>/dev/null || true
 cp -r node_modules/pgpass      .next/standalone/node_modules/pgpass      2>/dev/null || true
 
-# Turbopack appends a content-hash to scoped package names in the bundle (e.g.
-# @prisma/adapter-pg-<hash>). Scan the built chunks and create alias directories
-# in standalone/node_modules so Node can resolve the hashed names at runtime.
+# Copy file-extraction packages (pdf-parse, officeparser) — not bundled by Turbopack
+log "Copying pdf-parse and officeparser into standalone..."
+cp -r node_modules/pdf-parse   .next/standalone/node_modules/pdf-parse   2>/dev/null || true
+cp -r node_modules/officeparser .next/standalone/node_modules/officeparser 2>/dev/null || true
+
+# Turbopack appends a content-hash to package names in the bundle (e.g.
+# @prisma/adapter-pg-<hash>, pdf-parse-<hash>). Scan the built chunks and
+# create alias directories in standalone/node_modules so Node can resolve them.
 log "Creating Turbopack hash aliases in standalone node_modules..."
 node -e "
 const fs   = require('fs');
@@ -139,12 +144,12 @@ const path = require('path');
 const chunksDir = '.next/server/chunks';
 const modDir    = '.next/standalone/node_modules';
 
-// Find all hashed @-scoped package names used in the bundle
 const seen = new Set();
 for (const f of fs.readdirSync(chunksDir)) {
   if (!f.endsWith('.js')) continue;
   const src = fs.readFileSync(path.join(chunksDir, f), 'utf8');
-  const re = /[\"'](@[^/\"']+\/[^\"']*)-([0-9a-f]{16})[\"']/g;
+  // Match both scoped (@scope/pkg-hash) and unscoped (pkg-hash) package names
+  const re = /[\"'](@[^/\"']+\/[^\"']+|[a-z][a-z0-9_-]+)-([0-9a-f]{16})[\"']/g;
   let m;
   while ((m = re.exec(src)) !== null) seen.add(m[0].slice(1,-1));
 }
@@ -152,21 +157,25 @@ for (const f of fs.readdirSync(chunksDir)) {
 for (const hashed of seen) {
   // Strip the trailing -<hex> to get the real package name
   const real = hashed.replace(/-[0-9a-f]{16,}$/, '');
-  // Resolve scope dir (e.g. @prisma)
-  const [scope, pkg] = real.split('/');
-  const realDir  = path.join(modDir, scope, pkg);
-  const aliasDir = path.join(modDir, hashed.split('/')[0] ?? '', hashed.includes('/') ? hashed.split('/').slice(1).join('/') : hashed);
 
-  // For scoped packages like @prisma/adapter-pg-<hash>
-  const hashedScope = hashed.split('/')[0];       // '@prisma'
-  const hashedPkg   = hashed.split('/').slice(1).join('/');  // 'adapter-pg-<hash>'
-  const dest        = path.join(modDir, hashedScope, hashedPkg);
+  let realDir, dest;
+  if (real.startsWith('@')) {
+    // Scoped: @prisma/adapter-pg -> @prisma/adapter-pg-<hash>
+    const hashedScope = hashed.split('/')[0];
+    const hashedPkg   = hashed.split('/').slice(1).join('/');
+    const [scope, pkg] = real.split('/');
+    realDir = path.join(modDir, scope, pkg);
+    dest    = path.join(modDir, hashedScope, hashedPkg);
+  } else {
+    // Unscoped: pdf-parse -> pdf-parse-<hash>
+    realDir = path.join(modDir, real);
+    dest    = path.join(modDir, hashed);
+  }
 
   if (!fs.existsSync(realDir)) { console.log('  skip (no source):', real); continue; }
   if (fs.existsSync(dest))     { console.log('  already exists:', hashed); continue; }
 
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  // Copy the real package dir to the hashed name
   fs.cpSync(realDir, dest, { recursive: true });
   console.log('  aliased:', real, '->', hashed);
 }
@@ -198,6 +207,9 @@ node -e "
       // Prisma runtime packages (prevent buildpack from pruning them)
       '@prisma/client':      v('@prisma/client'),
       '@prisma/adapter-pg':  v('@prisma/adapter-pg'),
+      // File extraction packages (loaded at runtime, not bundled by Turbopack)
+      'pdf-parse':           v('pdf-parse'),
+      'officeparser':        v('officeparser'),
     },
     scripts: {}
   };

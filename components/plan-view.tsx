@@ -696,7 +696,10 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
                 </div>
               </div>
 
-              <button className="danger-btn" onClick={() => setShowDeleteConfirm(true)}>
+              <button className="danger-btn" onClick={() => {
+                setShowSettingsModal(false);
+                setShowDeleteConfirm(true);
+              }}>
                 Delete Plan
               </button>
             </div>

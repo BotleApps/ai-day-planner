@@ -674,8 +674,10 @@ function ActivityDetailPopup({
           border-radius: 20px 20px 0 0;
           z-index: 201;
           animation: slideUp 0.25s ease;
-          max-height: 80vh;
+          max-height: 85vh;
           overflow-y: auto;
+          /* Ensure content above the FABs (56px height + 24px bottom + safe area) */
+          padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         @keyframes slideUp {
@@ -815,7 +817,8 @@ function ActivityDetailPopup({
         }
 
         .popup-actions {
-          padding: 16px 20px 20px;
+          padding: 16px 20px;
+          padding-bottom: calc(16px + 88px + env(safe-area-inset-bottom, 0px));
           border-top: 1px solid var(--border);
         }
 
@@ -903,9 +906,9 @@ function ActivityDetailPopup({
           color: white;
         }
 
-        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+        @media (min-width: 640px) {
           .popup-actions {
-            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            padding-bottom: 20px;
           }
         }
       `}</style>

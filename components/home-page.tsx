@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Plan } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { ImportItineraryModal } from '@/components/import-itinerary-modal';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { UserMenu } from '@/components/user-menu';
 import {
   Plus,
@@ -43,6 +44,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [menuPlanId, setMenuPlanId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPlans();
@@ -60,16 +62,15 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
     }
   };
 
-  const handleDeletePlan = async (planId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Delete this plan?')) return;
-    
+  const handleDeletePlan = async () => {
+    if (!deletePlanId) return;
     try {
-      await fetch(`/api/plans?id=${planId}`, { method: 'DELETE' });
-      setPlans(plans.filter(p => p._id !== planId));
+      await fetch(`/api/plans?id=${deletePlanId}`, { method: 'DELETE' });
+      setPlans(plans.filter(p => p._id !== deletePlanId));
     } catch (error) {
       console.error('Error deleting plan:', error);
     }
+    setDeletePlanId(null);
     setMenuPlanId(null);
   };
 
@@ -145,16 +146,22 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
             <h1>Plan Your Perfect Day</h1>
             <p>Create AI-powered itineraries for holidays, trips, and special events</p>
             
-            <button className="primary-btn large" onClick={onCreatePlan}>
-              <Plus size={22} />
-              Create Your First Plan
-            </button>
+            <div className="empty-actions">
+              <button className="primary-btn large" onClick={onCreatePlan}>
+                <Plus size={22} />
+                Create Your First Plan
+              </button>
+              <button className="import-btn large" onClick={() => setShowImport(true)}>
+                <FileText size={18} />
+                Import Itinerary
+              </button>
+            </div>
 
             <div className="quick-start">
               <span className="divider-text">or quick start with</span>
               <div className="template-chips">
                 {QUICK_TEMPLATES.map(t => (
-                  <button 
+                  <button
                     key={t.id}
                     className="template-chip"
                     onClick={onCreatePlan}
@@ -172,14 +179,16 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           <div className="plans-view">
             <div className="plans-header">
               <h2>Your Plans</h2>
-              <button className="primary-btn compact" onClick={onCreatePlan}>
-                <Plus size={18} />
-                <span>New</span>
-              </button>
-              <button className="import-btn" onClick={() => setShowImport(true)}>
-                <FileText size={16} />
-                <span>Import</span>
-              </button>
+              <div className="plans-header-actions">
+                <button className="primary-btn compact" onClick={onCreatePlan}>
+                  <Plus size={18} />
+                  <span>New</span>
+                </button>
+                <button className="import-btn" onClick={() => setShowImport(true)}>
+                  <FileText size={16} />
+                  <span>Import</span>
+                </button>
+              </div>
             </div>
 
             {filteredPlans.length === 0 ? (
@@ -251,9 +260,13 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
                         <button onClick={() => { onSelectPlan(plan._id!); setMenuPlanId(null); }}>
                           Open Plan
                         </button>
-                        <button 
+                        <button
                           className="danger"
-                          onClick={(e) => handleDeletePlan(plan._id!, e)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletePlanId(plan._id!);
+                            setMenuPlanId(null);
+                          }}
                         >
                           <Trash2 size={14} />
                           Delete
@@ -278,6 +291,17 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           fetchPlans();
           onSelectPlan(planId);
         }}
+      />
+
+      {/* Delete Plan Confirmation */}
+      <ConfirmDialog
+        open={!!deletePlanId}
+        title="Delete Plan"
+        message={`Delete "${plans.find(p => p._id === deletePlanId)?.title ?? 'this plan'}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        onConfirm={handleDeletePlan}
+        onCancel={() => setDeletePlanId(null)}
       />
 
       {/* Click outside to close menu */}
@@ -466,12 +490,13 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           text-align: center;
           max-width: 400px;
           margin: 0 auto;
+          width: 100%;
         }
 
         .empty-illustration {
           width: 120px;
           height: 120px;
-          background: linear-gradient(135deg, 
+          background: linear-gradient(135deg,
             color-mix(in srgb, var(--primary) 15%, transparent),
             color-mix(in srgb, var(--accent) 10%, transparent)
           );
@@ -493,7 +518,14 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           color: var(--muted-foreground);
           font-size: 15px;
           line-height: 1.5;
-          margin-bottom: 32px;
+          margin-bottom: 28px;
+        }
+
+        .empty-actions {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
         }
 
         .primary-btn {
@@ -534,6 +566,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         .import-btn {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
           padding: 10px 16px;
           background: transparent;
@@ -544,6 +577,13 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s;
+        }
+
+        .import-btn.large {
+          width: 100%;
+          padding: 14px 24px;
+          font-size: 16px;
+          border-radius: 14px;
         }
 
         .import-btn:hover {
@@ -610,11 +650,19 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           align-items: center;
           justify-content: space-between;
           margin-bottom: 16px;
+          gap: 12px;
         }
 
         .plans-header h2 {
           font-size: 20px;
           font-weight: 700;
+          flex: 1;
+        }
+
+        .plans-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
         .no-results {
@@ -815,29 +863,35 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
 
         /* Responsive */
         @media (max-width: 480px) {
-          .templates-row {
-            grid-template-columns: repeat(2, 1fr);
+          .empty-state {
+            padding: 24px 20px;
+            justify-content: flex-start;
+            padding-top: 40px;
           }
 
-          .plan-card-footer {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .progress-indicator {
-            width: 100%;
-          }
-
-          .progress-bar {
-            flex: 1;
+          .empty-illustration {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
           }
 
           .empty-state h1 {
             font-size: 22px;
           }
 
-          .plans-header h2 {
-            font-size: 18px;
+          .empty-state > p {
+            font-size: 14px;
+            margin-bottom: 24px;
+          }
+
+          .primary-btn.large {
+            padding: 15px 20px;
+            font-size: 15px;
+          }
+
+          .import-btn.large {
+            padding: 13px 20px;
+            font-size: 15px;
           }
 
           .template-chips {
@@ -847,6 +901,34 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           .template-chip {
             padding: 9px 13px;
             font-size: 13px;
+          }
+
+          .plans-view {
+            padding: 12px 16px;
+          }
+
+          .plans-header h2 {
+            font-size: 18px;
+          }
+
+          .primary-btn.compact,
+          .import-btn:not(.large) {
+            padding: 9px 12px;
+            font-size: 14px;
+          }
+
+          .plan-card {
+            padding: 14px;
+            border-radius: 14px;
+          }
+
+          .plan-card-footer {
+            flex-direction: row;
+            align-items: center;
+          }
+
+          .progress-bar {
+            width: 40px;
           }
         }
 
@@ -860,7 +942,19 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           }
 
           .plans-view {
-            padding: 12px;
+            padding: 10px 12px;
+          }
+
+          .primary-btn.compact span,
+          .import-btn:not(.large) span {
+            display: none;
+          }
+
+          .primary-btn.compact,
+          .import-btn:not(.large) {
+            padding: 9px;
+            min-width: 36px;
+            border-radius: 10px;
           }
         }
       `}</style>
