@@ -4,18 +4,20 @@ import React, { useState, useEffect } from 'react';
 import { Checklist } from '@/lib/types';
 import { ChecklistCard } from './checklist-card';
 import { ConfirmDialog } from './confirm-dialog';
+import { TemplatesSection } from './templates-section';
 import { Plus, CheckSquare, Sparkles, LayoutTemplate, PenLine } from 'lucide-react';
 
 interface ChecklistListProps {
   onSelectChecklist: (id: string) => void;
   onCreateChecklist: (mode?: 'manual' | 'ai' | 'template') => void;
+  onUseTemplate: (templateId: string) => void;
 }
 
-export function ChecklistList({ onSelectChecklist, onCreateChecklist }: ChecklistListProps) {
+export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTemplate }: ChecklistListProps) {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [sharedChecklists, setSharedChecklists] = useState<Checklist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [tab, setTab] = useState<'mine' | 'shared'>('mine');
+  const [tab, setTab] = useState<'mine' | 'shared' | 'templates'>('mine');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [shareLinkMap, setShareLinkMap] = useState<Record<string, string>>({});
@@ -109,8 +111,19 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist }: Checklis
           Shared with Me
           {sharedChecklists.length > 0 && <span className="tab-badge">{sharedChecklists.length}</span>}
         </button>
+        <button
+          className={`tab-btn${tab === 'templates' ? ' active' : ''}`}
+          onClick={() => setTab('templates')}
+        >
+          <LayoutTemplate size={13} />
+          Templates
+        </button>
       </div>
 
+      {/* Templates tab */}
+      {tab === 'templates' ? (
+        <TemplatesSection onUseTemplate={(id, _title) => onUseTemplate(id)} />
+      ) : (<>
       {/* Search */}
       {filtered.length > 2 && (
         <div className="search-row">
@@ -173,6 +186,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist }: Checklis
           )}
         </div>
       )}
+      </>)}
 
       <ConfirmDialog
         open={!!deleteId}

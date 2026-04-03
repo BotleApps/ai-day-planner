@@ -14,6 +14,7 @@ interface CreateChecklistModalProps {
   onCreated: (checklistId: string) => void;
   defaultPlanId?: string;
   initialMode?: 'manual' | 'ai' | 'template';
+  initialTemplateId?: string;
 }
 
 type CreationMode = 'manual' | 'ai' | 'template';
@@ -48,7 +49,7 @@ const TEMPLATE_CATEGORIES = [
 ];
 
 export default function CreateChecklistModal({
-  isOpen, onClose, onCreated, defaultPlanId, initialMode,
+  isOpen, onClose, onCreated, defaultPlanId, initialMode, initialTemplateId,
 }: CreateChecklistModalProps) {
   // Navigation
   const [view, setView] = useState<View>('pick');
@@ -85,11 +86,15 @@ export default function CreateChecklistModal({
       .then(r => r.json())
       .then(d => setPlans(d.plans?.map((p: { id?: string; _id?: string; title: string }) => ({ id: p._id || p.id, title: p.title })) || []));
 
-    if (initialMode === 'ai') { setMode('ai'); setView('ai'); }
+    if (initialTemplateId) {
+      setMode('template');
+      setSelectedTemplateId(initialTemplateId);
+      setView('templates');
+    } else if (initialMode === 'ai') { setMode('ai'); setView('ai'); }
     else if (initialMode === 'template') { setMode('template'); setView('templates'); }
     else if (initialMode === 'manual') { setMode('manual'); setView('manual'); }
     else { setView('pick'); }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, initialTemplateId]);
 
   // Load templates when templates view is shown
   useEffect(() => {

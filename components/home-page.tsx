@@ -44,6 +44,7 @@ interface HomePageProps {
   onCreatePlan: () => void;
   onSelectChecklist: (id: string) => void;
   onCreateChecklist: (mode?: 'manual' | 'ai' | 'template') => void;
+  onUseTemplate: (templateId: string) => void;
 }
 
 const QUICK_TEMPLATES = [
@@ -53,7 +54,7 @@ const QUICK_TEMPLATES = [
   { id: 'relax', icon: Palmtree, title: 'Relaxation', emoji: '🌴', color: '#a855f7' },
 ];
 
-export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCreateChecklist }: HomePageProps) {
+export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCreateChecklist, onUseTemplate }: HomePageProps) {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
@@ -247,6 +248,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             <ChecklistList
               onSelectChecklist={onSelectChecklist}
               onCreateChecklist={onCreateChecklist}
+              onUseTemplate={onUseTemplate}
             />
           </div>
         ) : isLoading ? (
