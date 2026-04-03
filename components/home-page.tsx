@@ -5,7 +5,9 @@ import { Plan } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { ImportItineraryModal } from '@/components/import-itinerary-modal';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { UserMenu } from '@/components/user-menu';
+import { useSession, signOut } from 'next-auth/react';
+import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   Calendar,
@@ -14,6 +16,8 @@ import {
   Sparkles,
   Compass,
   Sun,
+  Moon,
+  Monitor,
   Palmtree,
   Mountain,
   Building2,
@@ -26,8 +30,14 @@ import {
   Users,
   Share2,
   CheckSquare,
+  User,
+  Bot,
+  LogOut,
+  ChevronRight,
+  CheckCircle2,
 } from 'lucide-react';
 import { ChecklistList } from './checklist-list';
+import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 
 interface HomePageProps {
   onSelectPlan: (planId: string) => void;
@@ -44,18 +54,27 @@ const QUICK_TEMPLATES = [
 ];
 
 export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCreateChecklist }: HomePageProps) {
+  const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
+  const router = useRouter();
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sharedPlans, setSharedPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [section, setSection] = useState<'plans' | 'checklists'>('plans');
+  const [section, setSection] = useState<'plans' | 'checklists' | 'profile'>('plans');
   const [tab, setTab] = useState<'mine' | 'shared'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [menuPlanId, setMenuPlanId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    const s = loadAISettings();
+    setAiConfigured(isAIConfigured(s));
     fetchPlans();
     fetchSharedPlans();
   }, []);
@@ -127,14 +146,10 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           </div>
           <div className="header-actions">
             {section === 'plans' && hasAnyPlans && (
-              <button
-                className="icon-btn"
-                onClick={() => setShowSearch(!showSearch)}
-              >
+              <button className="icon-btn" onClick={() => setShowSearch(!showSearch)}>
                 <Search size={20} />
               </button>
             )}
-            <UserMenu />
           </div>
         </div>
 
@@ -160,7 +175,74 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
       {/* Section Toggle — REMOVED, replaced by bottom nav */}
 
       <main className="main-content">
-        {section === 'checklists' ? (
+        {section === 'profile' ? (
+          <div className="profile-view">
+            {/* Avatar hero */}
+            <div className="profile-hero">
+              {session?.user?.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={session.user.image} alt={session.user.name ?? 'User'} className="profile-avatar" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="profile-avatar-fallback">
+                  {session?.user?.name?.[0]?.toUpperCase() ?? 'U'}
+                </div>
+              )}
+              <h2 className="profile-name">{session?.user?.name ?? 'User'}</h2>
+              <p className="profile-email">{session?.user?.email}</p>
+            </div>
+
+            {/* Appearance */}
+            <div className="profile-group-label">Appearance</div>
+            <div className="profile-group">
+              <div className="profile-row no-tap">
+                <div className="profile-row-left">
+                  <span className="profile-row-icon" style={{ background: '#f59e0b' }}><Sun size={16} /></span>
+                  <span className="profile-row-title">Theme</span>
+                </div>
+                {mounted && (
+                  <div className="theme-pills">
+                    {([['light', <Sun size={14} key="s" />, 'Light'], ['dark', <Moon size={14} key="m" />, 'Dark'], ['system', <Monitor size={14} key="mo" />, 'System']] as [string, React.ReactNode, string][]).map(([val, icon, label]) => (
+                      <button key={val} className={`theme-pill${theme === val ? ' active' : ''}`} onClick={() => setTheme(val)}>
+                        {icon}{label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Intelligence */}
+            <div className="profile-group-label">Intelligence</div>
+            <div className="profile-group">
+              <button className="profile-row" onClick={() => router.push('/settings/intelligence')}>
+                <div className="profile-row-left">
+                  <span className="profile-row-icon" style={{ background: aiConfigured ? '#10b981' : '#6366f1' }}>
+                    <Bot size={16} />
+                  </span>
+                  <div className="profile-row-text">
+                    <span className="profile-row-title">SAP AI Core</span>
+                    <span className="profile-row-sub">{aiConfigured ? 'Connected' : 'Not configured'}</span>
+                  </div>
+                </div>
+                <div className="profile-row-right">
+                  {aiConfigured && (
+                    <span className="badge-ok"><CheckCircle2 size={11} />Connected</span>
+                  )}
+                  <ChevronRight size={16} className="chevron" />
+                </div>
+              </button>
+            </div>
+
+            {/* Sign out */}
+            <div className="profile-group-label">Account</div>
+            <div className="profile-group">
+              <button className="profile-row danger-row" onClick={() => signOut({ callbackUrl: '/sign-in' })}>
+                <LogOut size={16} />
+                Sign out
+              </button>
+            </div>
+          </div>
+        ) : section === 'checklists' ? (
           <div className="plans-view">
             <ChecklistList
               onSelectChecklist={onSelectChecklist}
@@ -439,19 +521,22 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
       {/* Bottom Navigation */}
       <nav className="bottom-nav">
-        <button
-          className={`nav-item${section === 'plans' ? ' active' : ''}`}
-          onClick={() => setSection('plans')}
-        >
+        <button className={`nav-item${section === 'plans' ? ' active' : ''}`} onClick={() => setSection('plans')}>
           <Compass size={22} />
           <span>Plans</span>
         </button>
-        <button
-          className={`nav-item${section === 'checklists' ? ' active' : ''}`}
-          onClick={() => setSection('checklists')}
-        >
+        <button className={`nav-item${section === 'checklists' ? ' active' : ''}`} onClick={() => setSection('checklists')}>
           <CheckSquare size={22} />
           <span>Checklists</span>
+        </button>
+        <button className={`nav-item${section === 'profile' ? ' active' : ''}`} onClick={() => setSection('profile')}>
+          {session?.user?.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={session.user.image} alt="" className={`nav-avatar${section === 'profile' ? ' nav-avatar-active' : ''}`} referrerPolicy="no-referrer" />
+          ) : (
+            <User size={22} />
+          )}
+          <span>Profile</span>
         </button>
       </nav>
 
@@ -835,6 +920,203 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
         .nav-item span {
           letter-spacing: 0.01em;
+        }
+
+        .nav-avatar {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid transparent;
+        }
+        .nav-avatar-active {
+          border-color: var(--primary);
+        }
+
+        /* Profile section */
+        .profile-view {
+          max-width: 540px;
+          width: 100%;
+          margin: 0 auto;
+          padding: 0 20px 32px;
+        }
+
+        .profile-hero {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 36px 20px 28px;
+          gap: 8px;
+        }
+
+        .profile-avatar {
+          width: 88px;
+          height: 88px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 3px solid var(--border);
+          margin-bottom: 4px;
+        }
+
+        .profile-avatar-fallback {
+          width: 88px;
+          height: 88px;
+          border-radius: 50%;
+          background: var(--primary);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 32px;
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+
+        .profile-name {
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--foreground);
+          margin: 0;
+        }
+
+        .profile-email {
+          font-size: 13px;
+          color: var(--muted-foreground);
+          margin: 0;
+        }
+
+        .profile-group-label {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+          padding: 0 4px 8px;
+          margin-top: 20px;
+        }
+
+        .profile-group {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          overflow: hidden;
+        }
+
+        .profile-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 16px;
+          background: transparent;
+          border: none;
+          width: 100%;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.12s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .profile-row:hover { background: var(--muted); }
+        .profile-row.no-tap { cursor: default; }
+        .profile-row.no-tap:hover { background: transparent; }
+
+        .profile-row-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .profile-row-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          flex-shrink: 0;
+        }
+
+        .profile-row-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .profile-row-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--foreground);
+        }
+
+        .profile-row-sub {
+          font-size: 12px;
+          color: var(--muted-foreground);
+        }
+
+        .profile-row-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .chevron { color: var(--muted-foreground); }
+
+        .badge-ok {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 8px;
+          background: color-mix(in srgb, #10b981 15%, var(--card));
+          color: #059669;
+          border: 1px solid color-mix(in srgb, #10b981 30%, transparent);
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .danger-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 14px 16px;
+          width: 100%;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #ef4444;
+          transition: background 0.12s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .danger-row:hover { background: color-mix(in srgb, #ef4444 8%, var(--card)); }
+
+        /* Theme pills (profile) */
+        .theme-pills { display: flex; gap: 6px; flex-shrink: 0; }
+        .theme-pill {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 6px 10px;
+          border: 1.5px solid var(--border);
+          border-radius: 8px;
+          background: var(--background);
+          color: var(--muted-foreground);
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.15s;
+          white-space: nowrap;
+        }
+        .theme-pill:hover { border-color: var(--primary); color: var(--foreground); }
+        .theme-pill.active {
+          border-color: var(--primary);
+          background: color-mix(in srgb, var(--primary) 12%, var(--background));
+          color: var(--primary);
         }
 
         .tab-btn {
