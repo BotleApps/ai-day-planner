@@ -157,25 +157,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         )}
       </header>
 
-      {/* Section Toggle */}
-      <div className="section-toggle-bar">
-        <div className="section-toggle">
-          <button
-            className={`section-btn${section === 'plans' ? ' active' : ''}`}
-            onClick={() => setSection('plans')}
-          >
-            <Compass size={15} />
-            Plans
-          </button>
-          <button
-            className={`section-btn${section === 'checklists' ? ' active' : ''}`}
-            onClick={() => setSection('checklists')}
-          >
-            <CheckSquare size={15} />
-            Checklists
-          </button>
-        </div>
-      </div>
+      {/* Section Toggle — REMOVED, replaced by bottom nav */}
 
       <main className="main-content">
         {section === 'checklists' ? (
@@ -449,11 +431,29 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
       {/* Click outside to close menu */}
       {menuPlanId && (
-        <div 
-          className="menu-overlay" 
-          onClick={() => setMenuPlanId(null)} 
+        <div
+          className="menu-overlay"
+          onClick={() => setMenuPlanId(null)}
         />
       )}
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
+        <button
+          className={`nav-item${section === 'plans' ? ' active' : ''}`}
+          onClick={() => setSection('plans')}
+        >
+          <Compass size={22} />
+          <span>Plans</span>
+        </button>
+        <button
+          className={`nav-item${section === 'checklists' ? ' active' : ''}`}
+          onClick={() => setSection('checklists')}
+        >
+          <CheckSquare size={22} />
+          <span>Checklists</span>
+        </button>
+      </nav>
 
       <style jsx>{`
         .home-container {
@@ -592,6 +592,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           flex: 1;
           display: flex;
           flex-direction: column;
+          padding-bottom: 72px; /* space for bottom nav */
         }
 
         /* Loading State */
@@ -797,43 +798,43 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           margin-bottom: 16px;
         }
 
-        /* Section Toggle */
-        .section-toggle-bar {
+        /* Bottom Navigation */
+        .bottom-nav {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          z-index: 100;
           display: flex;
-          justify-content: center;
-          padding: 12px 16px 0;
-          background: var(--background);
-          border-bottom: 1px solid var(--border);
+          background: var(--card);
+          border-top: 1px solid var(--border);
+          padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
-        .section-toggle {
+        .nav-item {
+          flex: 1;
           display: flex;
-          background: var(--muted, #f3f4f6);
-          border-radius: 12px;
-          padding: 3px;
-          gap: 2px;
-        }
-
-        .section-btn {
-          display: flex;
+          flex-direction: column;
           align-items: center;
-          gap: 6px;
-          padding: 8px 20px;
-          border-radius: 9px;
+          justify-content: center;
+          gap: 4px;
+          padding: 10px 8px 12px;
           border: none;
           background: transparent;
-          font-size: 14px;
-          font-weight: 500;
-          color: var(--muted-foreground, #6b7280);
           cursor: pointer;
-          transition: all 0.2s;
+          color: var(--muted-foreground);
+          font-size: 11px;
+          font-weight: 500;
+          transition: color 0.15s;
+          -webkit-tap-highlight-color: transparent;
         }
 
-        .section-btn.active {
-          background: var(--background, white);
-          color: var(--foreground);
-          box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-          font-weight: 600;
+        .nav-item.active {
+          color: var(--primary);
+        }
+
+        .nav-item span {
+          letter-spacing: 0.01em;
         }
 
         .tab-btn {
