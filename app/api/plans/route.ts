@@ -84,20 +84,32 @@ const DAY_INCLUDE = {
   activities: { orderBy: { order: 'asc' as const } },
 };
 
-// GET — all plans for user, or single plan by id/shareLink
+// GET — all plans for user, or single plan by id/shareLink, or shared-with-me
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const planId = searchParams.get('id');
     const shareLink = searchParams.get('share');
+    const tab = searchParams.get('tab');
 
-    // Public share — no auth
+    // Public share — no auth required, but record access if the user is logged in
     if (shareLink) {
       const plan = await prisma.plan.findUnique({
         where: { shareLink },
         include: { days: { include: DAY_INCLUDE } },
       });
       if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+
+      // Record that this authenticated user accessed the plan (best-effort)
+      const session = await auth();
+      if (session?.user?.id && session.user.id !== plan.createdBy) {
+        await prisma.sharedAccess.upsert({
+          where: { userId_planId: { userId: session.user.id, planId: plan.id } },
+          update: { accessedAt: new Date() },
+          create: { id: generateId(), userId: session.user.id, planId: plan.id },
+        });
+      }
+
       return NextResponse.json({ plan: shapePlan(plan) });
     }
 
@@ -117,6 +129,17 @@ export async function GET(request: Request) {
       });
       if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
       return NextResponse.json({ plan: shapePlan(plan) });
+    }
+
+    // Shared-with-me tab — plans this user accessed via share links
+    if (tab === 'shared') {
+      const accesses = await prisma.sharedAccess.findMany({
+        where: { userId },
+        include: { plan: { include: { days: { include: DAY_INCLUDE } } } },
+        orderBy: { accessedAt: 'desc' },
+      });
+      const plans = accesses.map((a: { plan: any }) => shapePlan(a.plan));
+      return NextResponse.json({ plans });
     }
 
     const plans = await prisma.plan.findMany({
@@ -289,6 +312,38 @@ export async function PUT(request: Request) {
   } catch (error) {
     console.error('Error updating plan:', error);
     return NextResponse.json({ error: 'Failed to update plan' }, { status: 500 });
+  }
+}
+
+// PATCH — generate (or return existing) share link for a plan
+export async function PATCH(request: Request) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { id } = body;
+    if (!id) return NextResponse.json({ error: 'Plan ID is required' }, { status: 400 });
+
+    const plan = await prisma.plan.findFirst({
+      where: { id, createdBy: session.user.id },
+    });
+    if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+
+    // Reuse existing share link or generate a new one
+    const shareLink = plan.shareLink ?? generateId();
+
+    await prisma.plan.update({
+      where: { id },
+      data: { shareLink, isPublic: true },
+    });
+
+    return NextResponse.json({ shareLink });
+  } catch (error) {
+    console.error('Error generating share link:', error);
+    return NextResponse.json({ error: 'Failed to generate share link' }, { status: 500 });
   }
 }
 

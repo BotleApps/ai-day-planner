@@ -154,14 +154,21 @@ export function Timeline({
               <span className="timeline-hour-label">
                 {formatTime(hour, 0)}
               </span>
-              <div className="timeline-hour-line" />
-              <div className="timeline-half-hour-line" />
             </div>
           ))}
         </div>
 
         {/* Activities */}
         <div className="timeline-activities">
+          {/* Hour grid lines */}
+          <div className="timeline-grid-overlay">
+            {hours.map(hour => (
+              <div key={hour} className="timeline-grid-hour" style={{ height: HOUR_HEIGHT }}>
+                <div className="timeline-grid-line" />
+                <div className="timeline-grid-half" />
+              </div>
+            ))}
+          </div>
           {day.activities.map((activity, index) => {
             const top = getPositionForTime(activity.startTime);
             const height = (activity.duration / 60) * HOUR_HEIGHT;
@@ -316,31 +323,41 @@ export function Timeline({
           padding: 0 4px;
         }
 
-        .timeline-hour-line {
-          position: absolute;
-          top: 0;
-          left: 100%;
-          right: 0;
-          height: 1px;
-          background: var(--border);
-          width: 100%;
-        }
-
-        .timeline-half-hour-line {
-          position: absolute;
-          top: 50%;
-          left: 100%;
-          right: 0;
-          height: 1px;
-          background: var(--border);
-          opacity: 0.4;
-          width: 100%;
-        }
-
         .timeline-activities {
           flex: 1;
           position: relative;
           padding: 0 8px;
+        }
+
+        .timeline-grid-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .timeline-grid-hour {
+          position: relative;
+          width: 100%;
+        }
+
+        .timeline-grid-line {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: var(--border);
+        }
+
+        .timeline-grid-half {
+          position: absolute;
+          top: 50%;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: var(--border);
+          opacity: 0.4;
         }
 
         .drop-indicator {
@@ -421,6 +438,7 @@ export function Timeline({
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
           -webkit-tap-highlight-color: transparent;
           touch-action: manipulation;
+          z-index: 1;
         }
 
         .activity-card:hover {
@@ -551,6 +569,19 @@ export function Timeline({
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.2); opacity: 0.7; }
+        }
+
+        @media (max-width: 480px) {
+          .timeline-hours {
+            width: 48px;
+          }
+          .timeline-hour-label {
+            font-size: 10px;
+            right: 6px;
+          }
+          .activity-meta {
+            font-size: 12px;
+          }
         }
       `}</style>
     </div>

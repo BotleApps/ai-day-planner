@@ -83,7 +83,7 @@ export function ConfirmDialog({
           border-radius: 20px;
           padding: 28px 24px 24px;
           width: 100%;
-          max-width: 360px;
+          max-width: min(360px, 90vw);
           display: flex;
           flex-direction: column;
           align-items: center;

@@ -366,8 +366,9 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           border-radius: 24px 24px 0 0;
           width: 100%;
           max-width: 100%;
-          max-height: 95dvh;
+          max-height: 92dvh;
           overflow-y: auto;
+          box-sizing: border-box;
           box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
         }
 
@@ -398,7 +399,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 24px 20px 20px;
+          padding: 20px 20px 16px;
           gap: 6px;
         }
 
@@ -452,23 +453,23 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
         }
 
         .step-content {
-          padding: 0 20px 24px;
+          padding: 0 16px 16px;
         }
 
         .step-content h2 {
-          font-size: 22px;
+          font-size: 20px;
           font-weight: 700;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
 
         .step-content > p {
           color: var(--muted-foreground);
-          margin-bottom: 20px;
+          margin-bottom: 16px;
           font-size: 14px;
         }
 
         .form-group {
-          margin-bottom: 16px;
+          margin-bottom: 12px;
         }
 
         .form-group label {
@@ -483,13 +484,14 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
         input, textarea {
           width: 100%;
-          padding: 14px 16px;
+          padding: 12px 14px;
           border: 1px solid var(--border);
           border-radius: 12px;
           font-size: 16px;
           background: var(--background);
           color: var(--foreground);
           transition: all 0.2s ease;
+          box-sizing: border-box;
         }
 
         input:focus, textarea:focus {
@@ -523,48 +525,54 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
         }
 
         .preference-section {
-          margin-bottom: 20px;
+          margin-bottom: 16px;
         }
 
         .preference-section h3 {
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
           color: var(--foreground);
-          margin-bottom: 12px;
+          margin-bottom: 10px;
         }
 
         .time-inputs {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          gap: 10px;
         }
 
         .time-inputs.three {
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .time-inputs.three .form-group:last-child {
+          grid-column: 1 / -1;
         }
 
         .pace-selector {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
+          gap: 8px;
         }
 
         .pace-btn {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 6px;
-          padding: 14px 8px;
+          gap: 5px;
+          padding: 12px 6px;
           background: var(--muted);
           border: 2px solid transparent;
           border-radius: 14px;
           cursor: pointer;
           transition: all 0.2s ease;
-          font-size: 22px;
+          font-size: 20px;
+          min-width: 0;
         }
 
         .pace-btn span {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 500;
           color: var(--muted-foreground);
         }
@@ -584,9 +592,9 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
         .modal-actions {
           display: flex;
-          gap: 12px;
-          padding: 16px 20px;
-          padding-bottom: max(16px, env(safe-area-inset-bottom));
+          gap: 10px;
+          padding: 14px 16px;
+          padding-bottom: max(14px, env(safe-area-inset-bottom));
           border-top: 1px solid var(--border);
           background: var(--card);
         }
@@ -596,7 +604,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           align-items: center;
           justify-content: center;
           gap: 8px;
-          padding: 14px 20px;
+          padding: 13px 18px;
           border-radius: 12px;
           font-size: 15px;
           font-weight: 600;
@@ -651,22 +659,57 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
             padding: 0 32px 32px;
           }
 
-          .modal-actions {
-            padding: 20px 32px;
+          .step-content h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
           }
-        }
 
-        @media (max-width: 400px) {
-          .date-inputs {
-            grid-template-columns: 1fr;
+          .step-content > p {
+            margin-bottom: 20px;
+          }
+
+          .form-group {
+            margin-bottom: 16px;
+          }
+
+          .preference-section {
+            margin-bottom: 20px;
           }
 
           .time-inputs.three {
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          .time-inputs.three .form-group:last-child {
+            grid-column: auto;
+          }
+
+          .modal-actions {
+            padding: 20px 32px;
+            padding-bottom: 20px;
+          }
+
+          input, textarea {
+            padding: 14px 16px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .date-inputs {
             grid-template-columns: 1fr;
           }
 
           .pace-selector {
             grid-template-columns: 1fr;
+          }
+
+          .time-inputs,
+          .time-inputs.three {
+            grid-template-columns: 1fr;
+          }
+
+          .time-inputs.three .form-group:last-child {
+            grid-column: auto;
           }
         }
       `}</style>

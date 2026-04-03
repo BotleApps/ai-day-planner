@@ -823,6 +823,12 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           .modal { max-height: 96vh; border-radius: 16px; }
           .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
           .trip-chips { flex-direction: column; }
+          textarea { font-size: 16px; min-height: 150px; }
+          .input-toolbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+          .upload-btns { width: 100%; }
+          .upload-btn { flex: 1; justify-content: center; }
+          .activity-row { gap: 6px; padding: 9px 12px; }
+          .act-time span { font-size: 11px; }
         }
       `}</style>
     </div>

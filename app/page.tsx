@@ -10,25 +10,21 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Handle URL-based plan selection
   useEffect(() => {
     const planId = searchParams.get('plan');
     const shareLink = searchParams.get('share');
-    
+
     if (planId) {
       setSelectedPlanId(planId);
+      setShareToken(null);
     } else if (shareLink) {
-      // Fetch plan by share link
-      fetch(`/api/plans?share=${shareLink}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.plan) {
-            setSelectedPlanId(data.plan._id);
-          }
-        })
-        .catch(console.error);
+      // Keep the share token so PlanView can fetch via the public endpoint
+      setShareToken(shareLink);
+      setSelectedPlanId(null);
     }
   }, [searchParams]);
 
@@ -51,11 +47,12 @@ function HomeContent() {
     handleSelectPlan(planId);
   };
 
-  // Show plan view if a plan is selected
-  if (selectedPlanId) {
+  // Show plan view if a plan is selected (by id or share token)
+  if (selectedPlanId || shareToken) {
     return (
       <PlanView
-        planId={selectedPlanId}
+        planId={selectedPlanId ?? ''}
+        shareToken={shareToken ?? undefined}
         onBack={handleBackToHome}
       />
     );

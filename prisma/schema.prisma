@@ -37,6 +37,7 @@ model Plan {
   interests            String[] @default([])
 
   days DayPlan[]
+  sharedAccess SharedAccess[]
 
   @@index([createdBy])
   @@index([shareLink])
@@ -85,6 +86,17 @@ model Activity {
   dayPlan DayPlan @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
 
   @@index([dayPlanId])
+}
+
+model SharedAccess {
+  id         String   @id @default(cuid())
+  userId     String
+  planId     String
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  accessedAt DateTime @default(now())
+
+  @@unique([userId, planId])
+  @@index([userId])
 }
 
 model Task {

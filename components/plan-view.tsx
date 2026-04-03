@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plan, DayPlan, Activity, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
 import { formatDate, calculateDayProgress, formatDuration } from '@/lib/utils';
 import Timeline from '@/components/timeline';
@@ -25,14 +25,17 @@ import {
   StickyNote,
   MapPin,
   Calendar,
+  MoreHorizontal,
+  Edit2,
 } from 'lucide-react';
 
 interface PlanViewProps {
   planId: string;
+  shareToken?: string;
   onBack?: () => void;
 }
 
-export function PlanView({ planId, onBack }: PlanViewProps) {
+export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -44,8 +47,20 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // View mode: 'timeline' | 'text'
-  const [viewMode, setViewMode] = useState<'timeline' | 'text'>('timeline');
+  // View mode: 'timeline' | 'text' — persisted in localStorage
+  const [viewMode, setViewMode] = useState<'timeline' | 'text'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('planViewMode') as 'timeline' | 'text') || 'timeline';
+    }
+    return 'timeline';
+  });
+  const [showViewPopover, setShowViewPopover] = useState(false);
+
+  const switchViewMode = (mode: 'timeline' | 'text') => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') localStorage.setItem('planViewMode', mode);
+    setShowViewPopover(false);
+  };
 
   // Day notes
   const [showNotesPanel, setShowNotesPanel] = useState(false);
@@ -54,11 +69,29 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
 
   // Confirm dialog for plan delete
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showEditPlanModal, setShowEditPlanModal] = useState(false);
+  const [editPlanData, setEditPlanData] = useState({
+    title: '',
+    destination: '',
+    description: '',
+    startDate: '',
+    endDate: '',
+  });
+  const [editPlanSaving, setEditPlanSaving] = useState(false);
+
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
 
   // Fetch plan
   const fetchPlan = useCallback(async () => {
     try {
-      const res = await fetch(`/api/plans?id=${planId}`);
+      const url = shareToken
+        ? `/api/plans?share=${shareToken}`
+        : `/api/plans?id=${planId}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (data.plan) {
         setPlan(data.plan);
@@ -74,11 +107,24 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [planId, selectedDayId]);
+  }, [planId, shareToken, selectedDayId]);
 
   useEffect(() => {
     fetchPlan();
   }, [fetchPlan]);
+
+  // Scroll timeline to current time on initial load
+  useEffect(() => {
+    if (!plan || !timelineScrollRef.current) return;
+    const now = new Date();
+    const HOUR_HEIGHT = 80;
+    const START_HOUR = 6;
+    const currentMinutes = (now.getHours() - START_HOUR) * 60 + now.getMinutes();
+    if (currentMinutes > 0) {
+      const scrollPos = Math.max(0, (currentMinutes / 60) * HOUR_HEIGHT - 120);
+      timelineScrollRef.current.scrollTop = scrollPos;
+    }
+  }, [plan]);
 
   const selectedDay = plan?.days.find(d => d.id === selectedDayId);
   const selectedDayIndex = plan?.days.findIndex(d => d.id === selectedDayId) ?? 0;
@@ -102,17 +148,40 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
     setShowActivityModal(true);
   }, []);
 
-  // Handle share
-  const handleShare = async () => {
-    const url = window.location.href;
+  // Handle share — generate a persistent share link then copy it
+  const [shareUrl, setShareUrl] = useState<string>('');
+  const [shareGenerating, setShareGenerating] = useState(false);
+
+  const openShareModal = async () => {
+    setShowShareModal(true);
+    setShareGenerating(true);
     try {
-      await navigator.clipboard.writeText(url);
+      const res = await fetch('/api/plans', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plan!._id }),
+      });
+      const data = await res.json();
+      if (data.shareLink) {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        setShareUrl(`${base}/?share=${data.shareLink}`);
+      }
+    } catch {
+      setShareUrl(typeof window !== 'undefined' ? window.location.href : '');
+    } finally {
+      setShareGenerating(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const input = document.createElement('input');
-      input.value = url;
+      input.value = shareUrl;
       document.body.appendChild(input);
       input.select();
       document.execCommand('copy');
@@ -231,6 +300,7 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
         }),
       });
       await fetchPlan();
+      setShowNotesPanel(false);
     } finally {
       setNotesSaving(false);
     }
@@ -242,6 +312,37 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
     setShowDeleteConfirm(false);
     setShowSettingsModal(false);
     if (onBack) onBack();
+  };
+
+  // Open edit plan modal — pre-populate with current plan values
+  const openEditPlanModal = () => {
+    setEditPlanData({
+      title: plan!.title,
+      destination: plan!.destination || '',
+      description: plan!.description || '',
+      startDate: plan!.startDate,
+      endDate: plan!.endDate,
+    });
+    setShowMoreMenu(false);
+    setShowSettingsModal(false);
+    setShowEditPlanModal(true);
+  };
+
+  // Save edited plan details
+  const handleSaveEditPlan = async () => {
+    if (!plan || !editPlanData.title.trim() || !editPlanData.startDate || !editPlanData.endDate) return;
+    setEditPlanSaving(true);
+    try {
+      await fetch('/api/plans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plan._id, ...editPlanData }),
+      });
+      setShowEditPlanModal(false);
+      fetchPlan();
+    } finally {
+      setEditPlanSaving(false);
+    }
   };
 
   // Replace all activities (from AI)
@@ -346,38 +447,104 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           </div>
 
           <div className="header-actions">
-            {/* View mode toggle */}
-            <div className="view-toggle">
+            {/* View mode toggle — single button with popover */}
+            <div className="view-toggle-wrap" onClick={e => e.stopPropagation()}>
               <button
-                className={`view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-                onClick={() => setViewMode('timeline')}
-                title="Timeline view"
+                className={`btn-icon ${showViewPopover ? 'active' : ''}`}
+                onClick={() => setShowViewPopover(v => !v)}
+                title="Switch view"
               >
-                <LayoutList size={15} />
+                {viewMode === 'timeline' ? <LayoutList size={17} /> : <AlignLeft size={17} />}
               </button>
+              {showViewPopover && (
+                <div className="view-popover">
+                  <button
+                    className={`view-popover-item ${viewMode === 'timeline' ? 'active-item' : ''}`}
+                    onClick={() => switchViewMode('timeline')}
+                  >
+                    <LayoutList size={15} />
+                    Timeline
+                  </button>
+                  <button
+                    className={`view-popover-item ${viewMode === 'text' ? 'active-item' : ''}`}
+                    onClick={() => switchViewMode('text')}
+                  >
+                    <AlignLeft size={15} />
+                    List
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop: individual buttons */}
+            <div className="header-actions-desktop">
               <button
-                className={`view-btn ${viewMode === 'text' ? 'active' : ''}`}
-                onClick={() => setViewMode('text')}
-                title="Text view"
+                className={`btn-icon ${showNotesPanel ? 'active' : ''}`}
+                title="Day notes"
+                onClick={() => setShowNotesPanel(v => !v)}
               >
-                <AlignLeft size={15} />
+                <StickyNote size={17} />
+              </button>
+              <button className="btn-icon" title="Share" onClick={openShareModal}>
+                <Share2 size={17} />
+              </button>
+              <button className="btn-icon" title="Settings" onClick={() => setShowSettingsModal(true)}>
+                <Settings size={17} />
               </button>
             </div>
-            <button
-              className={`btn-icon ${showNotesPanel ? 'active' : ''}`}
-              title="Day notes"
-              onClick={() => setShowNotesPanel(v => !v)}
-            >
-              <StickyNote size={16} />
-            </button>
-            <button className="btn-icon" title="Share" onClick={() => setShowShareModal(true)}>
-              <Share2 size={18} />
-            </button>
-            <button className="btn-icon" title="Settings" onClick={() => setShowSettingsModal(true)}>
-              <Settings size={18} />
-            </button>
+
+            {/* Mobile: overflow menu */}
+            <div className="header-more-wrap" onClick={e => e.stopPropagation()}>
+              <button
+                className={`btn-icon ${showMoreMenu ? 'active' : ''}`}
+                onClick={() => setShowMoreMenu(v => !v)}
+                title="More options"
+              >
+                <MoreHorizontal size={17} />
+              </button>
+              {showMoreMenu && (
+                <div className="more-menu">
+                  <button
+                    className={`more-menu-item ${showNotesPanel ? 'active-item' : ''}`}
+                    onClick={() => { setShowNotesPanel(v => !v); setShowMoreMenu(false); }}
+                  >
+                    <StickyNote size={16} />
+                    Day Notes
+                  </button>
+                  <button
+                    className="more-menu-item"
+                    onClick={() => { openShareModal(); setShowMoreMenu(false); }}
+                  >
+                    <Share2 size={16} />
+                    Share
+                  </button>
+                  <button
+                    className="more-menu-item"
+                    onClick={openEditPlanModal}
+                  >
+                    <Edit2 size={16} />
+                    Edit Plan
+                  </button>
+                  <button
+                    className="more-menu-item"
+                    onClick={() => { setShowSettingsModal(true); setShowMoreMenu(false); }}
+                  >
+                    <Settings size={16} />
+                    Settings
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
+
+        {/* Click-outside overlay to close more menu */}
+        {showMoreMenu && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 190 }}
+            onClick={() => setShowMoreMenu(false)}
+          />
+        )}
 
         {/* Slim Day Selector */}
         <div className="day-strip">
@@ -407,6 +574,7 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
                   {dayProgress.total > 0 && (
                     <span className="day-count">{dayProgress.completed}/{dayProgress.total}</span>
                   )}
+                  {day.notes && <span className="notes-dot" title="Has notes" />}
                 </button>
               );
             })}
@@ -418,6 +586,14 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
             disabled={selectedDayIndex === plan.days.length - 1}
           >
             <ChevronRight size={18} />
+          </button>
+
+          <button
+            className="nav-btn day-picker-btn"
+            title="Jump to day"
+            onClick={() => setShowDayPicker(true)}
+          >
+            <Calendar size={15} />
           </button>
         </div>
 
@@ -460,7 +636,22 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
       )}
 
       {/* Main content — Timeline or Text view */}
-      <div className="timeline-container">
+      <div
+        className="timeline-container"
+        ref={timelineScrollRef}
+        onTouchStart={(e) => {
+          touchStartX.current = e.touches[0].clientX;
+          touchStartY.current = e.touches[0].clientY;
+        }}
+        onTouchEnd={(e) => {
+          const dx = e.changedTouches[0].clientX - touchStartX.current;
+          const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+          if (Math.abs(dx) > 60 && dy < 40) {
+            if (dx < 0) goToDay('next');
+            else goToDay('prev');
+          }
+        }}
+      >
         {selectedDay && viewMode === 'timeline' && (
           <Timeline
             day={selectedDay}
@@ -614,12 +805,12 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
               
               <div className="share-link-box">
                 <Link2 size={18} />
-                <input 
-                  type="text" 
-                  readOnly 
-                  value={typeof window !== 'undefined' ? window.location.href : ''} 
+                <input
+                  type="text"
+                  readOnly
+                  value={shareGenerating ? 'Generating link…' : shareUrl}
                 />
-                <button className="copy-btn" onClick={handleShare}>
+                <button className="copy-btn" onClick={handleShare} disabled={shareGenerating || !shareUrl}>
                   {copied ? <Check size={18} /> : <Copy size={18} />}
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
@@ -628,15 +819,15 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
               <div className="share-options">
                 <p className="share-label">Or share via</p>
                 <div className="share-buttons">
-                  <button 
+                  <button
                     className="share-option"
-                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Check out my plan: ${plan.title}\n${window.location.href}`)}`, '_blank')}
+                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Check out my plan: ${plan.title}\n${shareUrl}`)}`, '_blank')}
                   >
                     WhatsApp
                   </button>
-                  <button 
+                  <button
                     className="share-option"
-                    onClick={() => window.open(`mailto:?subject=${encodeURIComponent(`Plan: ${plan.title}`)}&body=${encodeURIComponent(`Check out my plan: ${window.location.href}`)}`, '_blank')}
+                    onClick={() => window.open(`mailto:?subject=${encodeURIComponent(`Plan: ${plan.title}`)}&body=${encodeURIComponent(`Check out my plan: ${shareUrl}`)}`, '_blank')}
                   >
                     Email
                   </button>
@@ -702,6 +893,44 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
               }}>
                 Delete Plan
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Day Picker Modal */}
+      {showDayPicker && (
+        <div className="modal-overlay" onClick={() => setShowDayPicker(false)}>
+          <div className="modal-content day-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Jump to Day</h3>
+              <button className="close-btn" onClick={() => setShowDayPicker(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="day-picker-list">
+              {plan.days.map((day) => {
+                const isSelected = day.id === selectedDayId;
+                const isToday = day.date === today;
+                const dp = calculateDayProgress(day);
+                return (
+                  <button
+                    key={day.id}
+                    className={`day-picker-item ${isSelected ? 'selected' : ''}`}
+                    onClick={() => { setSelectedDayId(day.id); setShowDayPicker(false); }}
+                  >
+                    <span className="day-picker-num">Day {day.dayNumber}</span>
+                    <div className="day-picker-info">
+                      <span className="day-picker-date">
+                        {new Date(day.date + 'T12:00:00').toLocaleDateString('en', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        {isToday && <span className="day-picker-today"> · Today</span>}
+                      </span>
+                      {day.title && <span className="day-picker-title">{day.title}</span>}
+                    </div>
+                    <span className="day-picker-count">{dp.completed}/{dp.total}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -916,6 +1145,18 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           background: var(--border);
         }
 
+        .notes-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #f59e0b;
+          flex-shrink: 0;
+        }
+
+        .day-pill.selected .notes-dot {
+          background: rgba(255,255,255,0.8);
+        }
+
         /* Progress Bar */
         .day-progress {
           display: flex;
@@ -960,6 +1201,64 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           color: var(--primary);
         }
 
+        /* Desktop header action buttons (hidden on mobile) */
+        .header-actions-desktop {
+          display: flex;
+          gap: 4px;
+        }
+
+        /* Mobile overflow menu (hidden on desktop) */
+        .header-more-wrap {
+          display: none;
+          position: relative;
+        }
+
+        .more-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 6px;
+          min-width: 160px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+          z-index: 200;
+        }
+
+        .more-menu-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 10px 12px;
+          border: none;
+          background: none;
+          font-size: 14px;
+          color: var(--foreground);
+          border-radius: 8px;
+          cursor: pointer;
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        .more-menu-item:hover {
+          background: var(--muted);
+        }
+
+        .more-menu-item.active-item {
+          color: var(--primary);
+        }
+
+        @media (max-width: 520px) {
+          .header-actions-desktop {
+            display: none;
+          }
+          .header-more-wrap {
+            display: block;
+          }
+        }
+
         /* Notes panel */
         .notes-panel {
           background: color-mix(in srgb, var(--accent) 6%, var(--card));
@@ -986,7 +1285,7 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           padding: 10px 12px;
           border: 1px solid var(--border);
           border-radius: 10px;
-          font-size: 14px;
+          font-size: 16px;
           background: var(--card);
           color: var(--foreground);
           resize: vertical;
@@ -1491,6 +1790,81 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           background: #dc2626;
         }
 
+        .day-picker-btn {
+          flex-shrink: 0;
+        }
+
+        .day-picker-modal .modal-header {
+          border-radius: 20px 20px 0 0;
+        }
+
+        .day-picker-list {
+          overflow-y: auto;
+          max-height: 60vh;
+          padding: 8px 0;
+        }
+
+        .day-picker-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          padding: 12px 20px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          text-align: left;
+          transition: background 0.12s;
+          color: var(--foreground);
+        }
+
+        .day-picker-item:hover { background: var(--muted); }
+
+        .day-picker-item.selected {
+          background: color-mix(in srgb, var(--primary) 10%, transparent);
+        }
+
+        .day-picker-num {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--primary);
+          min-width: 48px;
+          flex-shrink: 0;
+        }
+
+        .day-picker-info {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .day-picker-date {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--foreground);
+        }
+
+        .day-picker-today {
+          color: var(--primary);
+          font-weight: 600;
+        }
+
+        .day-picker-title {
+          font-size: 12px;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .day-picker-count {
+          font-size: 12px;
+          color: var(--muted-foreground);
+          flex-shrink: 0;
+        }
+
         /* Desktop adjustments */
         @media (min-width: 768px) {
           .ai-modal-overlay,
@@ -1536,8 +1910,8 @@ export function PlanView({ planId, onBack }: PlanViewProps) {
           }
 
           .view-btn {
-            width: 24px;
-            height: 24px;
+            width: 40px;
+            height: 40px;
           }
 
           .header-center h1 {
