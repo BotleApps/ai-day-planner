@@ -4,7 +4,9 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import HomePage from '@/components/home-page';
 import PlanView from '@/components/plan-view';
+import ChecklistDetail from '@/components/checklist-detail';
 import CreatePlanModal from '@/components/create-plan-modal';
+import CreateChecklistModal from '@/components/create-checklist-modal';
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -12,19 +14,36 @@ function HomeContent() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedChecklistId, setSelectedChecklistId] = useState<string | null>(null);
+  const [checklistShareToken, setChecklistShareToken] = useState<string | null>(null);
+  const [showCreateChecklistModal, setShowCreateChecklistModal] = useState(false);
 
-  // Handle URL-based plan selection
   useEffect(() => {
     const planId = searchParams.get('plan');
     const shareLink = searchParams.get('share');
+    const checklistId = searchParams.get('checklist');
+    const cshare = searchParams.get('cshare');
 
     if (planId) {
       setSelectedPlanId(planId);
       setShareToken(null);
+      setSelectedChecklistId(null);
+      setChecklistShareToken(null);
     } else if (shareLink) {
-      // Keep the share token so PlanView can fetch via the public endpoint
       setShareToken(shareLink);
       setSelectedPlanId(null);
+      setSelectedChecklistId(null);
+      setChecklistShareToken(null);
+    } else if (checklistId) {
+      setSelectedChecklistId(checklistId);
+      setChecklistShareToken(null);
+      setSelectedPlanId(null);
+      setShareToken(null);
+    } else if (cshare) {
+      setChecklistShareToken(cshare);
+      setSelectedChecklistId(null);
+      setSelectedPlanId(null);
+      setShareToken(null);
     }
   }, [searchParams]);
 
@@ -35,19 +54,22 @@ function HomeContent() {
 
   const handleBackToHome = () => {
     setSelectedPlanId(null);
+    setShareToken(null);
+    setSelectedChecklistId(null);
+    setChecklistShareToken(null);
     router.push('/');
   };
 
-  const handleCreatePlan = () => {
-    setShowCreateModal(true);
+  const handleSelectChecklist = (checklistId: string) => {
+    setSelectedChecklistId(checklistId);
+    router.push(`/?checklist=${checklistId}`);
   };
 
-  const handlePlanCreated = (planId: string) => {
-    setShowCreateModal(false);
-    handleSelectPlan(planId);
+  const handleChecklistCreated = (checklistId: string) => {
+    setShowCreateChecklistModal(false);
+    handleSelectChecklist(checklistId);
   };
 
-  // Show plan view if a plan is selected (by id or share token)
   if (selectedPlanId || shareToken) {
     return (
       <PlanView
@@ -58,17 +80,36 @@ function HomeContent() {
     );
   }
 
-  // Show home page with plan list
+  if (selectedChecklistId || checklistShareToken) {
+    return (
+      <ChecklistDetail
+        checklistId={selectedChecklistId ?? undefined}
+        shareToken={checklistShareToken ?? undefined}
+        onBack={handleBackToHome}
+      />
+    );
+  }
+
   return (
     <>
       <HomePage
         onSelectPlan={handleSelectPlan}
-        onCreatePlan={handleCreatePlan}
+        onCreatePlan={() => setShowCreateModal(true)}
+        onSelectChecklist={handleSelectChecklist}
+        onCreateChecklist={() => setShowCreateChecklistModal(true)}
       />
       <CreatePlanModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onPlanCreated={handlePlanCreated}
+        onPlanCreated={(planId) => {
+          setShowCreateModal(false);
+          handleSelectPlan(planId);
+        }}
+      />
+      <CreateChecklistModal
+        isOpen={showCreateChecklistModal}
+        onClose={() => setShowCreateChecklistModal(false)}
+        onCreated={handleChecklistCreated}
       />
     </>
   );
@@ -91,3 +132,4 @@ export default function Home() {
     </Suspense>
   );
 }
+

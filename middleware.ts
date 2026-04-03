@@ -27,6 +27,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // Always allow: public checklist share link (/?cshare=xxx)
+  if (nextUrl.pathname === '/' && nextUrl.searchParams.has('cshare')) {
+    return NextResponse.next();
+  }
+
   const base = getBaseUrl(req);
 
   // Sign-in page: redirect to home if already logged in

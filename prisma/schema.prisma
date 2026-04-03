@@ -111,3 +111,81 @@ model Task {
 
   @@index([userId])
 }
+
+model Checklist {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String   @default("")
+  dueDate     String?
+  dueTime     String?
+  planId      String?
+  shareLink   String?  @unique
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items        ChecklistItem[]
+  sharedAccess SharedChecklistAccess[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([shareLink])
+}
+
+model ChecklistItem {
+  id          String    @id @default(cuid())
+  checklistId String
+  title       String
+  groupName   String    @default("")
+  completed   Boolean   @default(false)
+  order       Int       @default(0)
+  dueDate     String?
+  notes       String    @default("")
+
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId])
+}
+
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  authorId    String
+  authorName  String   @default("")
+  title       String
+  description String   @default("")
+  category    String   @default("general")
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       ChecklistTemplateItem[]
+
+  @@index([authorId])
+  @@index([isPublished])
+  @@index([category])
+}
+
+model ChecklistTemplateItem {
+  id         String            @id @default(cuid())
+  templateId String
+  title      String
+  groupName  String            @default("")
+  order      Int               @default(0)
+  notes      String            @default("")
+
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model SharedChecklistAccess {
+  id          String    @id @default(cuid())
+  userId      String
+  checklistId String
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  accessedAt  DateTime  @default(now())
+
+  @@unique([userId, checklistId])
+  @@index([userId])
+}

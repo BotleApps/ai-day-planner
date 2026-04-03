@@ -230,3 +230,76 @@ export const ACTIVITY_ICONS: Record<ActivityType, string> = {
   work: '💼',
   custom: '📌',
 };
+
+// ─── Checklist ────────────────────────────────────────────────────────────────
+
+export type ChecklistTemplateCategory =
+  | 'general'
+  | 'travel'
+  | 'event'
+  | 'work'
+  | 'home'
+  | 'health'
+  | 'shopping'
+  | 'other';
+
+export interface ChecklistItem {
+  id: string;
+  _id?: string;
+  checklistId: string;
+  title: string;
+  groupName: string;
+  completed: boolean;
+  order: number;
+  dueDate?: string | null;
+  notes?: string;
+}
+
+export interface Checklist {
+  id: string;
+  _id?: string;
+  userId: string;
+  title: string;
+  description?: string;
+  dueDate?: string | null;
+  dueTime?: string | null;
+  planId?: string | null;
+  shareLink?: string | null;
+  isPublic: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  items: ChecklistItem[];
+}
+
+export interface ChecklistTemplateItem {
+  id: string;
+  templateId: string;
+  title: string;
+  groupName: string;
+  order: number;
+  notes?: string;
+}
+
+export interface ChecklistTemplate {
+  id: string;
+  authorId: string;
+  authorName?: string;
+  title: string;
+  description?: string;
+  category: ChecklistTemplateCategory;
+  isPublished: boolean;
+  itemCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+  items?: ChecklistTemplateItem[];
+}
+
+export interface AIChecklistGroup {
+  groupName: string;
+  items: string[];
+}
+
+export interface AIChecklistGenerationResult {
+  title: string;
+  groups: AIChecklistGroup[];
+}

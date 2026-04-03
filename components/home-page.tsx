@@ -25,11 +25,15 @@ import {
   FileText,
   Users,
   Share2,
+  CheckSquare,
 } from 'lucide-react';
+import { ChecklistList } from './checklist-list';
 
 interface HomePageProps {
   onSelectPlan: (planId: string) => void;
   onCreatePlan: () => void;
+  onSelectChecklist: (id: string) => void;
+  onCreateChecklist: () => void;
 }
 
 const QUICK_TEMPLATES = [
@@ -39,10 +43,11 @@ const QUICK_TEMPLATES = [
   { id: 'relax', icon: Palmtree, title: 'Relaxation', emoji: '🌴', color: '#a855f7' },
 ];
 
-export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
+export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCreateChecklist }: HomePageProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sharedPlans, setSharedPlans] = useState<Plan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [section, setSection] = useState<'plans' | 'checklists'>('plans');
   const [tab, setTab] = useState<'mine' | 'shared'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -121,7 +126,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
             <span>Day Planner</span>
           </div>
           <div className="header-actions">
-            {hasAnyPlans && (
+            {section === 'plans' && hasAnyPlans && (
               <button
                 className="icon-btn"
                 onClick={() => setShowSearch(!showSearch)}
@@ -133,7 +138,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
           </div>
         </div>
 
-        {showSearch && (
+        {showSearch && section === 'plans' && (
           <div className="search-bar">
             <Search size={18} />
             <input
@@ -152,8 +157,35 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         )}
       </header>
 
+      {/* Section Toggle */}
+      <div className="section-toggle-bar">
+        <div className="section-toggle">
+          <button
+            className={`section-btn${section === 'plans' ? ' active' : ''}`}
+            onClick={() => setSection('plans')}
+          >
+            <Compass size={15} />
+            Plans
+          </button>
+          <button
+            className={`section-btn${section === 'checklists' ? ' active' : ''}`}
+            onClick={() => setSection('checklists')}
+          >
+            <CheckSquare size={15} />
+            Checklists
+          </button>
+        </div>
+      </div>
+
       <main className="main-content">
-        {isLoading ? (
+        {section === 'checklists' ? (
+          <div className="plans-view">
+            <ChecklistList
+              onSelectChecklist={onSelectChecklist}
+              onCreateChecklist={onCreateChecklist}
+            />
+          </div>
+        ) : isLoading ? (
           <div className="loading-state">
             <div className="spinner" />
             <p>Loading your plans...</p>
@@ -750,7 +782,7 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         /* Plans View */
         .plans-view {
           flex: 1;
-          padding: 0;
+          padding: 0 16px;
           max-width: 600px;
           margin: 0 auto;
           width: 100%;
@@ -760,8 +792,48 @@ export function HomePage({ onSelectPlan, onCreatePlan }: HomePageProps) {
         .tabs-bar {
           display: flex;
           gap: 4px;
-          padding: 12px 16px 0;
+          padding: 12px 0 0;
           border-bottom: 1px solid var(--border);
+          margin-bottom: 16px;
+        }
+
+        /* Section Toggle */
+        .section-toggle-bar {
+          display: flex;
+          justify-content: center;
+          padding: 12px 16px 0;
+          background: var(--background);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .section-toggle {
+          display: flex;
+          background: var(--muted, #f3f4f6);
+          border-radius: 12px;
+          padding: 3px;
+          gap: 2px;
+        }
+
+        .section-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 20px;
+          border-radius: 9px;
+          border: none;
+          background: transparent;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--muted-foreground, #6b7280);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .section-btn.active {
+          background: var(--background, white);
+          color: var(--foreground);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+          font-weight: 600;
         }
 
         .tab-btn {
