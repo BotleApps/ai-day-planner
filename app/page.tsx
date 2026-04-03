@@ -17,6 +17,7 @@ function HomeContent() {
   const [selectedChecklistId, setSelectedChecklistId] = useState<string | null>(null);
   const [checklistShareToken, setChecklistShareToken] = useState<string | null>(null);
   const [showCreateChecklistModal, setShowCreateChecklistModal] = useState(false);
+  const [createChecklistMode, setCreateChecklistMode] = useState<'manual' | 'ai' | 'template' | undefined>();
 
   useEffect(() => {
     const planId = searchParams.get('plan');
@@ -67,6 +68,7 @@ function HomeContent() {
 
   const handleChecklistCreated = (checklistId: string) => {
     setShowCreateChecklistModal(false);
+    setCreateChecklistMode(undefined);
     handleSelectChecklist(checklistId);
   };
 
@@ -96,7 +98,7 @@ function HomeContent() {
         onSelectPlan={handleSelectPlan}
         onCreatePlan={() => setShowCreateModal(true)}
         onSelectChecklist={handleSelectChecklist}
-        onCreateChecklist={() => setShowCreateChecklistModal(true)}
+        onCreateChecklist={(mode) => { setCreateChecklistMode(mode); setShowCreateChecklistModal(true); }}
       />
       <CreatePlanModal
         isOpen={showCreateModal}
@@ -108,8 +110,9 @@ function HomeContent() {
       />
       <CreateChecklistModal
         isOpen={showCreateChecklistModal}
-        onClose={() => setShowCreateChecklistModal(false)}
+        onClose={() => { setShowCreateChecklistModal(false); setCreateChecklistMode(undefined); }}
         onCreated={handleChecklistCreated}
+        initialMode={createChecklistMode}
       />
     </>
   );

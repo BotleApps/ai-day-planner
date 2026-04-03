@@ -63,3 +63,25 @@ export function isAIConfigured(settings: AISettings): boolean {
     !!settings.deploymentId
   );
 }
+
+/** Load AI settings from the server (synced across devices). Falls back to defaults on error. */
+export async function loadAISettingsFromServer(): Promise<AISettings> {
+  try {
+    const res = await fetch('/api/user-settings');
+    if (!res.ok) return DEFAULT_AI_SETTINGS;
+    const data = await res.json();
+    return { ...DEFAULT_AI_SETTINGS, ...data.settings };
+  } catch {
+    return DEFAULT_AI_SETTINGS;
+  }
+}
+
+/** Persist AI settings to the server and update the localStorage cache. */
+export async function saveAISettingsToServer(settings: AISettings): Promise<void> {
+  saveAISettings(settings); // update local cache immediately
+  await fetch('/api/user-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}

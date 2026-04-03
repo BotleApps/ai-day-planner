@@ -8,7 +8,7 @@ import { Plus, CheckSquare, Sparkles, LayoutTemplate, PenLine } from 'lucide-rea
 
 interface ChecklistListProps {
   onSelectChecklist: (id: string) => void;
-  onCreateChecklist: () => void;
+  onCreateChecklist: (mode?: 'manual' | 'ai' | 'template') => void;
 }
 
 export function ChecklistList({ onSelectChecklist, onCreateChecklist }: ChecklistListProps) {
@@ -130,15 +130,15 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist }: Checklis
           <h3>No checklists yet</h3>
           <p>Stay organized with smart checklists</p>
           <div className="creation-chips">
-            <button className="chip" onClick={onCreateChecklist}>
+            <button className="chip" onClick={() => onCreateChecklist('manual')}>
               <PenLine size={16} />
               Manual
             </button>
-            <button className="chip chip-ai" onClick={onCreateChecklist}>
+            <button className="chip chip-ai" onClick={() => onCreateChecklist('ai')}>
               <Sparkles size={16} />
               AI Generate
             </button>
-            <button className="chip chip-template" onClick={onCreateChecklist}>
+            <button className="chip chip-template" onClick={() => onCreateChecklist('template')}>
               <LayoutTemplate size={16} />
               From Template
             </button>
@@ -166,7 +166,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist }: Checklis
             />
           ))}
           {tab === 'mine' && (
-            <button className="create-card" onClick={onCreateChecklist}>
+            <button className="create-card" onClick={() => onCreateChecklist()}>
               <Plus size={24} />
               <span>New Checklist</span>
             </button>

@@ -87,7 +87,7 @@ export async function GET(request: Request) {
         },
         orderBy: { accessedAt: 'desc' },
       });
-      const checklists = accesses.map(a => shapeChecklist(a.checklist));
+      const checklists = accesses.map((a: { checklist: Parameters<typeof shapeChecklist>[0] }) => shapeChecklist(a.checklist));
       return NextResponse.json({ checklists });
     }
 
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    const checklist = await prisma.$transaction(async (tx) => {
+    const checklist = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
       const created = await tx.checklist.create({
         data: {
           userId: session.user.id,

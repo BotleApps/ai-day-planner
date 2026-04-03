@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
-    const checklist = await prisma.$transaction(async (tx) => {
+    const checklist = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
       const created = await tx.checklist.create({
         data: {
           userId: session.user.id,
@@ -37,11 +37,11 @@ export async function POST(request: Request) {
 
       if (template.items.length > 0) {
         await tx.checklistItem.createMany({
-          data: template.items.map(item => ({
+          data: template.items.map((item: { title: string; groupName: string | null; notes: string | null; order: number }) => ({
             checklistId: created.id,
             title: item.title,
-            groupName: item.groupName,
-            notes: item.notes,
+            groupName: item.groupName ?? undefined,
+            notes: item.notes ?? undefined,
             order: item.order,
           })),
         });
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      checklist: { ...checklist, _id: checklist!.id, items: checklist!.items.map(i => ({ ...i, _id: i.id })) },
+      checklist: { ...checklist, _id: checklist!.id, items: checklist!.items.map((i: { id: string }) => ({ ...i, _id: i.id })) },
     });
   } catch (error) {
     console.error('Error creating from template:', error);

@@ -254,6 +254,7 @@ cf set-env "$APP_NAME" NEXTAUTH_SECRET      "$NEXTAUTH_SECRET"
 cf set-env "$APP_NAME" NEXTAUTH_URL         "$CF_APP_URL"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_ID     "$GOOGLE_CLIENT_ID"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
+cf set-env "$APP_NAME" ENCRYPTION_KEY       "$ENCRYPTION_KEY"
 
 # ── 11. Start the app ────────────────────────────────────────────────────────
 log "Starting $APP_NAME..."

@@ -16,7 +16,7 @@ import {
   AlertCircle,
   LogOut,
 } from 'lucide-react';
-import { loadAISettings, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettings, saveAISettings, isAIConfigured, loadAISettingsFromServer, saveAISettingsToServer } from '@/lib/ai-settings';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -30,17 +30,29 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setMounted(true);
-    const s = loadAISettings();
-    setAiEnabled(s.enabled);
-    setAiConfigured(isAIConfigured(s));
-    setAiModelName(s.modelName || s.deploymentId || '');
-    setAiBackend(s.backend || '');
+    // Load from localStorage immediately (no flash)
+    const local = loadAISettings();
+    setAiEnabled(local.enabled);
+    setAiConfigured(isAIConfigured(local));
+    setAiModelName(local.modelName || local.deploymentId || '');
+    setAiBackend(local.backend || '');
+    // Sync from server (authoritative cross-device)
+    loadAISettingsFromServer().then(s => {
+      if (s.clientId || s.deploymentId) {
+        saveAISettings(s);
+        setAiEnabled(s.enabled);
+        setAiConfigured(isAIConfigured(s));
+        setAiModelName(s.modelName || s.deploymentId || '');
+        setAiBackend(s.backend || '');
+      }
+    });
   }, []);
 
   const handleToggleAI = (checked: boolean) => {
     setAiEnabled(checked);
     const s = loadAISettings();
-    saveAISettings({ ...s, enabled: checked });
+    const updated = { ...s, enabled: checked };
+    saveAISettingsToServer(updated);
   };
 
   const THEME_OPTIONS = [

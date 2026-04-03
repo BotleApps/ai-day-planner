@@ -19,6 +19,8 @@ import {
   AIModelOption,
   loadAISettings,
   saveAISettings,
+  loadAISettingsFromServer,
+  saveAISettingsToServer,
   DEFAULT_AI_SETTINGS,
 } from '@/lib/ai-settings';
 
@@ -47,7 +49,15 @@ export default function IntelligencePage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    // Load localStorage immediately (no flash)
     setSettings(loadAISettings());
+    // Then sync from server (authoritative, cross-device)
+    loadAISettingsFromServer().then(serverSettings => {
+      if (serverSettings.clientId || serverSettings.deploymentId) {
+        setSettings(serverSettings);
+        saveAISettings(serverSettings); // refresh local cache
+      }
+    });
   }, []);
 
   const update = (patch: Partial<AISettings>) => {
@@ -55,8 +65,8 @@ export default function IntelligencePage() {
     setSaved(false);
   };
 
-  const handleSave = () => {
-    saveAISettings(settings);
+  const handleSave = async () => {
+    await saveAISettingsToServer({ ...settings, enabled: true });
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -64,9 +74,9 @@ export default function IntelligencePage() {
     }, 900);
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     const reset = { ...DEFAULT_AI_SETTINGS, enabled: false };
-    saveAISettings(reset);
+    await saveAISettingsToServer(reset);
     setSettings(reset);
     setModels([]);
     setStatus('idle');
@@ -322,7 +332,7 @@ export default function IntelligencePage() {
         )}
 
         <p className="privacy">
-          Credentials are stored only in your browser and sent to your Next.js server — never to third parties.
+          Credentials are encrypted and stored securely on the server, synced across all your devices.
         </p>
       </div>
 
@@ -486,14 +496,20 @@ export default function IntelligencePage() {
           letter-spacing: 0.04em;
         }
         .field-row input {
-          padding: 0;
-          border: none;
-          background: transparent;
+          padding: 11px 14px;
+          border: 1.5px solid var(--border);
+          border-radius: 10px;
+          background: var(--background);
           color: var(--foreground);
           font-size: 14px;
           width: 100%;
           outline: none;
+          min-height: 44px;
+          box-sizing: border-box;
+          -webkit-appearance: none;
+          transition: border-color 0.15s;
         }
+        .field-row input:focus { border-color: var(--primary); }
         .field-row input::placeholder { color: color-mix(in srgb, var(--muted-foreground) 60%, transparent); }
         .hint {
           font-size: 11px;
@@ -507,10 +523,10 @@ export default function IntelligencePage() {
         }
 
         .secret-wrap { position: relative; display: flex; align-items: center; }
-        .secret-wrap input { flex: 1; padding-right: 28px; }
+        .secret-wrap input { flex: 1; padding-right: 44px; }
         .eye-btn {
           position: absolute;
-          right: 0;
+          right: 12px;
           background: none;
           border: none;
           color: var(--muted-foreground);

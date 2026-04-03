@@ -14,7 +14,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ tasks: tasks.map(t => ({ ...t, _id: t.id })) });
+    return NextResponse.json({ tasks: tasks.map((t: { id: string }) => ({ ...t, _id: t.id })) });
   } catch (error) {
     console.error('Error fetching tasks:', error);
     return NextResponse.json({ error: 'Failed to fetch tasks', tasks: [] }, { status: 500 });

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChecklistTemplate, ChecklistTemplateCategory, AIChecklistGenerationResult } from '@/lib/types';
 import { loadAISettings } from '@/lib/ai-settings';
-import { Search, X, Sparkles, BookTemplate, LayoutTemplate } from 'lucide-react';
+import { Search, X, Sparkles, LayoutTemplate } from 'lucide-react';
 
 const CATEGORIES: { value: ChecklistTemplateCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },

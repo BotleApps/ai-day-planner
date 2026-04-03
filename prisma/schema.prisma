@@ -189,3 +189,17 @@ model SharedChecklistAccess {
   @@unique([userId, checklistId])
   @@index([userId])
 }
+
+model UserSettings {
+  userId          String   @id
+  aiEnabled       Boolean  @default(false)
+  clientId        String   @default("")
+  clientSecretEnc String   @default("")
+  authUrl         String   @default("")
+  apiUrl          String   @default("")
+  resourceGroup   String   @default("default")
+  deploymentId    String   @default("")
+  backend         String   @default("openai")
+  modelName       String   @default("")
+  updatedAt       DateTime @updatedAt
+}

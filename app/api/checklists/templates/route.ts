@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
     if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
 
-    const template = await prisma.$transaction(async (tx) => {
+    const template = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
       const created = await tx.checklistTemplate.create({
         data: {
           authorId: session.user.id,

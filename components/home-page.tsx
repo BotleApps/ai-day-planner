@@ -33,7 +33,7 @@ interface HomePageProps {
   onSelectPlan: (planId: string) => void;
   onCreatePlan: () => void;
   onSelectChecklist: (id: string) => void;
-  onCreateChecklist: () => void;
+  onCreateChecklist: (mode?: 'manual' | 'ai' | 'template') => void;
 }
 
 const QUICK_TEMPLATES = [
