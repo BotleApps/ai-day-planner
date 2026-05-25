@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 
 export function SplashScreen() {
   const [phase, setPhase] = useState<'in' | 'hold' | 'out' | 'done'>('in');
@@ -26,12 +25,12 @@ export function SplashScreen() {
     <div className={`splash ${phase}`} aria-hidden="true">
       <div className="splash-content">
         <div className="splash-icon">
-          <Sparkles size={32} />
+          <img src="/icons/icon.png" alt="SortedPlan" width={52} height={52} />
         </div>
         <div className="splash-wordmark">
           Sorted<strong>Plan</strong>
         </div>
-        <div className="splash-tagline">Plan smarter. Travel better.</div>
+        <div className="splash-tagline">Plan smarter. Achieve more.</div>
       </div>
 
       <style jsx>{`
@@ -65,20 +64,20 @@ export function SplashScreen() {
         }
 
         .splash-icon {
-          width: 72px;
-          height: 72px;
+          width: 80px;
+          height: 80px;
           border-radius: 20px;
-          background: var(--primary);
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 8px 32px color-mix(in srgb, var(--primary) 40%, transparent);
+          overflow: hidden;
           animation: splash-pulse 1.2s ease-in-out infinite;
         }
+        .splash-icon img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
         @keyframes splash-pulse {
-          0%, 100% { box-shadow: 0 8px 32px color-mix(in srgb, var(--primary) 40%, transparent); }
-          50%       { box-shadow: 0 12px 48px color-mix(in srgb, var(--primary) 60%, transparent); }
+          0%, 100% { box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+          50%       { box-shadow: 0 12px 48px rgba(0,0,0,0.25); }
         }
 
         .splash-wordmark {

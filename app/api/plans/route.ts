@@ -238,8 +238,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ plan: shapePlan(plan) });
   } catch (error) {
-    console.error('Error creating plan:', error);
-    return NextResponse.json({ error: 'Failed to create plan' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Error creating plan:', msg);
+    return NextResponse.json({ error: `Failed to create plan: ${msg}` }, { status: 500 });
   }
 }
 

@@ -13,7 +13,6 @@ import {
   Calendar,
   MapPin,
   Clock,
-  Sparkles,
   Compass,
   Sun,
   Moon,
@@ -143,7 +142,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         <div className="header-content">
           <div className="logo">
             <div className="logo-icon">
-              <Sparkles size={20} />
+              <img src="/icons/icon.png" alt="SortedPlan" width={32} height={32} />
             </div>
             <span>
               {section === 'plans' ? 'Plans' : section === 'checklists' ? 'Checklists' : 'Profile'}
@@ -585,13 +584,11 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         .logo-icon {
           width: 36px;
           height: 36px;
-          background: linear-gradient(135deg, var(--primary), var(--accent));
           border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
+          overflow: hidden;
+          flex-shrink: 0;
         }
+        .logo-icon img { width: 100%; height: 100%; object-fit: cover; }
 
         .header-actions {
           display: flex;

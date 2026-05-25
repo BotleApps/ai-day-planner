@@ -13,8 +13,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "SortedPlan",
-  description: "AI-powered travel planning — build beautiful day-by-day itineraries, smart checklists, and share with your crew.",
-  keywords: ["travel planner", "day planner", "AI itinerary", "trip planning", "SortedPlan"],
+  description: "AI-powered planning — build beautiful day-by-day schedules, smart checklists, and share with your crew.",
+  keywords: ["planner", "day planner", "AI planner", "trip planning", "SortedPlan"],
   authors: [{ name: "SortedPlan" }],
   manifest: "/manifest.json",
   appleWebApp: {
@@ -24,6 +24,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/icons/icon-32x32.png",   sizes: "32x32",   type: "image/png" },
+      { url: "/icons/icon-96x96.png",   sizes: "96x96",   type: "image/png" },
       { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -31,6 +33,7 @@ export const metadata: Metadata = {
       { url: "/icons/icon-152x152.png", sizes: "152x152", type: "image/png" },
       { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
     ],
+    shortcut: "/icon.png",
   },
 };
 

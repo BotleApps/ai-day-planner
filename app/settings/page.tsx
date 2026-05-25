@@ -123,7 +123,7 @@ export default function SettingsPage() {
         {/* ── Appearance ─────────────────────────── */}
         <div className="group-label">Appearance</div>
         <div className="group">
-          <div className="row no-hover">
+          <div className="row no-hover theme-row">
             <div className="row-left">
               <span className="row-icon" style={{ background: '#f59e0b' }}>
                 <Sun size={15} />
@@ -158,7 +158,7 @@ export default function SettingsPage() {
               </span>
               <div className="row-text">
                 <span className="row-title">Enable Intelligence</span>
-                <span className="row-desc">Power the AI assistant with SAP AI Core</span>
+                <span className="row-desc">Connect an AI provider to power the assistant</span>
               </div>
             </div>
             <label className="toggle">
@@ -184,7 +184,7 @@ export default function SettingsPage() {
                       <Bot size={15} />
                     </span>
                     <div className="row-text">
-                      <span className="row-title">SAP AI Core</span>
+                      <span className="row-title">AI Provider</span>
                       <span className="row-desc">
                         {aiModelName || 'Model configured'}
                         {aiBackend ? ` · ${BACKEND_LABEL[aiBackend] || aiBackend}` : ''}
@@ -207,8 +207,8 @@ export default function SettingsPage() {
                       <AlertCircle size={15} />
                     </span>
                     <div className="row-text">
-                      <span className="row-title">Configure SAP AI Core</span>
-                      <span className="row-desc">Add your service key to get started</span>
+                      <span className="row-title">Configure AI Provider</span>
+                      <span className="row-desc">Add your credentials to get started</span>
                     </div>
                   </div>
                   <ChevronRight size={16} className="chevron" />
@@ -399,21 +399,27 @@ export default function SettingsPage() {
         .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
 
         /* Theme pills */
+        .theme-row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
+        }
         .theme-pills {
-          display: flex;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
           gap: 6px;
-          flex-shrink: 0;
         }
         .theme-pill {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
-          padding: 6px 12px;
+          padding: 8px 12px;
           border: 1.5px solid var(--border);
-          border-radius: 8px;
+          border-radius: 10px;
           background: var(--background);
           color: var(--muted-foreground);
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.15s;
@@ -489,8 +495,6 @@ export default function SettingsPage() {
         }
 
         @media (max-width: 480px) {
-          .theme-pills { gap: 4px; }
-          .theme-pill { padding: 5px 8px; font-size: 11px; }
           .row { padding: 12px 14px; }
         }
       `}</style>

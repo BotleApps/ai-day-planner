@@ -105,8 +105,18 @@ log "DB svc   : $CF_DB_SERVICE_NAME"
 # ── 5. Authenticate with CF ───────────────────────────────────────────────────
 banner "CF Authentication"
 
-cf api "$CF_API" --skip-ssl-validation 2>/dev/null || cf api "$CF_API"
+# Only call `cf api` when the endpoint actually needs to change.
+# Calling it unconditionally resets the session even when already logged in.
+CURRENT_CF_API=$(cf api 2>/dev/null | awk '/API endpoint:/ {print $NF}')
+if [ "$CURRENT_CF_API" != "$CF_API" ]; then
+  log "Setting CF API endpoint: $CF_API"
+  cf api "$CF_API" --skip-ssl-validation 2>/dev/null || cf api "$CF_API"
+else
+  log "CF API already set: $CF_API"
+fi
 
+# `cf target -o/-s` exits 0 when authenticated and able to target the org/space.
+# It exits non-zero when the session has expired or never existed.
 if cf target -o "$CF_ORG" -s "$CF_SPACE" > /dev/null 2>&1; then
   log "Already authenticated — targeting Org=$CF_ORG | Space=$CF_SPACE"
 else

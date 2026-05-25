@@ -30,6 +30,7 @@ type Step = 'basics' | 'dates' | 'preferences';
 export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanModalProps) {
   const [step, setStep] = useState<Step>('basics');
   const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -54,7 +55,8 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
   const handleCreate = async () => {
     setIsCreating(true);
-    
+    setCreateError(null);
+
     try {
       const res = await fetch('/api/plans', {
         method: 'POST',
@@ -68,14 +70,17 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           preferences: formData.preferences,
         }),
       });
-      
+
       const data = await res.json();
       if (data.plan) {
         onPlanCreated?.(data.plan._id);
         onClose();
+      } else {
+        setCreateError(data.error || 'Failed to create plan. Please try again.');
       }
     } catch (error) {
       console.error('Error creating plan:', error);
+      setCreateError('Failed to create plan. Please check your connection and try again.');
     } finally {
       setIsCreating(false);
     }
@@ -316,17 +321,21 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
         {/* Actions */}
         <div className="modal-actions">
+          {createError && (
+            <div className="create-error">{createError}</div>
+          )}
+          <div className="action-row">
           {step !== 'basics' && (
             <button className="btn-secondary" onClick={handleBack}>
               <ChevronLeft size={18} />
               Back
             </button>
           )}
-          
+
           <div style={{ flex: 1 }} />
-          
+
           {step !== 'preferences' ? (
-            <button 
+            <button
               className="btn-primary"
               onClick={handleNext}
               disabled={!canProceed()}
@@ -335,7 +344,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
               <ChevronRight size={18} />
             </button>
           ) : (
-            <button 
+            <button
               className="btn-primary create"
               onClick={handleCreate}
               disabled={isCreating}
@@ -344,6 +353,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
               <Sparkles size={18} />
             </button>
           )}
+          </div>
         </div>
       </div>
 
@@ -367,7 +377,9 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           width: 100%;
           max-width: 100%;
           max-height: 92dvh;
-          overflow-y: auto;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
           box-sizing: border-box;
           box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
         }
@@ -401,6 +413,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           justify-content: center;
           padding: 20px 20px 16px;
           gap: 6px;
+          flex-shrink: 0;
         }
 
         .step {
@@ -454,6 +467,10 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
         .step-content {
           padding: 0 16px 16px;
+          flex: 1;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          min-height: 0;
         }
 
         .step-content h2 {
@@ -510,6 +527,10 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           gap: 12px;
         }
 
+        .date-inputs .form-group {
+          min-width: 0;
+        }
+
         .day-count {
           display: flex;
           align-items: center;
@@ -539,6 +560,10 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 10px;
+        }
+
+        .time-inputs .form-group {
+          min-width: 0;
         }
 
         .time-inputs.three {
@@ -592,11 +617,29 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
 
         .modal-actions {
           display: flex;
-          gap: 10px;
+          flex-direction: column;
+          gap: 8px;
           padding: 14px 16px;
           padding-bottom: max(14px, env(safe-area-inset-bottom));
           border-top: 1px solid var(--border);
           background: var(--card);
+          flex-shrink: 0;
+        }
+
+        .action-row {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+
+        .create-error {
+          background: color-mix(in srgb, #ef4444 12%, transparent);
+          border: 1px solid color-mix(in srgb, #ef4444 30%, transparent);
+          color: #ef4444;
+          border-radius: 10px;
+          padding: 10px 14px;
+          font-size: 13px;
+          font-weight: 500;
         }
 
         .btn-secondary, .btn-primary {

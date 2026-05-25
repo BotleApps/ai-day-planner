@@ -23,7 +23,7 @@ export function LandingPage() {
         <div className="nav-inner">
           <div className="brand">
             <div className="brand-icon">
-              <Sparkles size={18} />
+              <img src="/icons/icon.png" alt="SortedPlan" width={28} height={28} />
             </div>
             <span className="brand-name">Sorted<strong>Plan</strong></span>
           </div>
@@ -40,15 +40,15 @@ export function LandingPage() {
         <div className="hero-inner">
           <div className="hero-badge">
             <Zap size={12} />
-            AI-Powered Trip Planning
+            AI-Powered Planning
           </div>
           <h1 className="hero-title">
             Plan smarter.<br />
-            <span className="hero-gradient">Travel better.</span>
+            <span className="hero-gradient">Achieve more.</span>
           </h1>
           <p className="hero-sub">
-            Sorted Plan uses AI to turn any idea into a perfectly timed day-by-day itinerary.
-            Add checklists, maps, photos — then share with your travel crew.
+            Sorted Plan uses AI to turn any idea into a perfectly timed day-by-day plan.
+            Add checklists, maps, photos — then share with your crew.
           </p>
           <div className="hero-cta">
             <button className="btn-primary" onClick={startSignIn}>
@@ -69,8 +69,8 @@ export function LandingPage() {
       {/* ── Features ────────────────────────────────────────────── */}
       <section className="features">
         <div className="section-inner">
-          <h2 className="section-title">Everything you need to plan any trip</h2>
-          <p className="section-sub">From a weekend getaway to a three-week adventure — Sorted Plan keeps every detail in one place.</p>
+          <h2 className="section-title">Everything you need to plan anything</h2>
+          <p className="section-sub">From a work project to a family vacation — Sorted Plan keeps every detail in one place.</p>
 
           <div className="feature-grid">
             <div className="feature-card feature-card--primary">
@@ -78,7 +78,7 @@ export function LandingPage() {
                 <Sparkles size={22} />
               </div>
               <h3>AI Itinerary Builder</h3>
-              <p>Paste any raw itinerary text or describe your trip — our AI parses it into a structured, time-blocked day plan in seconds.</p>
+              <p>Paste any raw schedule or describe your event — our AI parses it into a structured, time-blocked day plan in seconds.</p>
               <div className="feature-tag">Powered by Gemini & SAP AI</div>
             </div>
 
@@ -95,7 +95,7 @@ export function LandingPage() {
                 <CheckSquare size={22} />
               </div>
               <h3>Smart Checklists</h3>
-              <p>AI generates comprehensive packing lists, to-dos, and booking checklists tailored to your specific trip type.</p>
+              <p>AI generates comprehensive packing lists, to-dos, and checklists tailored to any event or project type.</p>
             </div>
 
             <div className="feature-card">
@@ -119,7 +119,7 @@ export function LandingPage() {
                 <Star size={22} />
               </div>
               <h3>Community Templates</h3>
-              <p>Browse and use checklist templates published by the community. Publish your own and help other travellers.</p>
+              <p>Browse and use checklist templates published by the community. Publish your own and help others plan better.</p>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@ export function LandingPage() {
             <div className="step">
               <div className="step-num">2</div>
               <h4>Create a Plan</h4>
-              <p>Name your trip, pick dates, let AI draft the itinerary.</p>
+              <p>Name your plan, pick dates, let AI draft the schedule.</p>
             </div>
             <div className="step-arrow"><ArrowRight size={18} /></div>
             <div className="step">
@@ -155,8 +155,8 @@ export function LandingPage() {
       <section className="cta-banner">
         <div className="cta-glow" />
         <div className="section-inner cta-inner">
-          <h2>Ready to plan your next adventure?</h2>
-          <p>Join thousands of travellers who plan with Sorted Plan.</p>
+          <h2>Ready to start planning?</h2>
+          <p>Join thousands of people who organise their lives with Sorted Plan.</p>
           <button className="btn-primary btn-primary--lg" onClick={startSignIn}>
             Start planning for free
             <ArrowRight size={18} />
@@ -169,7 +169,7 @@ export function LandingPage() {
         <div className="nav-inner">
           <div className="brand">
             <div className="brand-icon brand-icon--sm">
-              <Sparkles size={14} />
+              <img src="/icons/icon.png" alt="SortedPlan" width={22} height={22} />
             </div>
             <span className="brand-name brand-name--sm">Sorted<strong>Plan</strong></span>
           </div>
@@ -215,13 +215,13 @@ export function LandingPage() {
           width: 36px;
           height: 36px;
           border-radius: 10px;
-          background: var(--primary);
-          color: white;
+          overflow: hidden;
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          flex-shrink: 0;
         }
+        .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
         .brand-icon--sm {
           width: 28px;
           height: 28px;
