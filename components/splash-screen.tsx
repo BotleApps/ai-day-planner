@@ -25,7 +25,7 @@ export function SplashScreen() {
     <div className={`splash ${phase}`} aria-hidden="true">
       <div className="splash-content">
         <div className="splash-icon">
-          <img src="/icons/icon.png" alt="SortedPlan" width={52} height={52} />
+          <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={52} height={52} />
         </div>
         <div className="splash-wordmark">
           Sorted<strong>Plan</strong>

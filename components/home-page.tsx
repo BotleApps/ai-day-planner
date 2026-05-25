@@ -142,7 +142,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         <div className="header-content">
           <div className="logo">
             <div className="logo-icon">
-              <img src="/icons/icon.png" alt="SortedPlan" width={32} height={32} />
+              <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={32} height={32} />
             </div>
             <span>
               {section === 'plans' ? 'Plans' : section === 'checklists' ? 'Checklists' : 'Profile'}
