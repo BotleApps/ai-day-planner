@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/sap-ai-core';
+import { geminiChat } from '@/lib/gemini';
 import { AISettings } from '@/lib/ai-settings';
 import { Activity, DayPlan } from '@/lib/types';
 
@@ -108,6 +109,16 @@ function parseAIJson(raw: string): ParsedPlan {
   return JSON.parse(cleaned);
 }
 
+async function runChat(settings: AISettings, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
+  if (settings.provider === 'gemini') {
+    if (!settings.geminiApiKey || !settings.geminiModel) {
+      throw new Error('Gemini API key and model are required');
+    }
+    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage, maxTokens);
+  }
+  return chat(settings, systemPrompt, userMessage, maxTokens);
+}
+
 export async function POST(req: NextRequest) {
   let body: ParseRequest;
   try {
@@ -121,15 +132,20 @@ export async function POST(req: NextRequest) {
   if (!text?.trim()) {
     return NextResponse.json({ error: 'text is required' }, { status: 400 });
   }
-  if (!settings?.clientId || !settings?.deploymentId) {
-    return NextResponse.json({ error: 'SAP AI Core is not configured' }, { status: 400 });
+
+  if (settings?.provider === 'gemini') {
+    if (!settings?.geminiApiKey || !settings?.geminiModel) {
+      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
+    }
+  } else {
+    if (!settings?.clientId || !settings?.deploymentId) {
+      return NextResponse.json({ error: 'SAP AI Core is not configured' }, { status: 400 });
+    }
   }
 
   try {
-    const raw = await chat(settings, SYSTEM_PROMPT, text.slice(0, 12000), 8000); // cap input at 12k chars, allow 8k output tokens
+    const raw = await runChat(settings, SYSTEM_PROMPT, text.slice(0, 12000), 8000);
     const parsed = parseAIJson(raw);
-
-    // Normalise days into full Activity objects
     const days = normaliseDays(parsed.days || []);
 
     return NextResponse.json({

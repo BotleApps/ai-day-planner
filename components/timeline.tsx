@@ -28,6 +28,8 @@ import {
   Trash2,
   Pause,
   RotateCcw,
+  ExternalLink,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface TimelineProps {
@@ -90,9 +92,12 @@ export function Timeline({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (!timelineRef.current) return;
-    
+
     const rect = timelineRef.current.getBoundingClientRect();
-    const y = e.clientY - rect.top + timelineRef.current.scrollTop;
+    // Scroll offset now comes from the parent scroll container (plan-view's timeline-container)
+    const scrollParent = timelineRef.current.closest('.timeline-container') as HTMLElement | null;
+    const scrollTop = scrollParent ? scrollParent.scrollTop : 0;
+    const y = e.clientY - rect.top + scrollTop;
     const time = getTimeFromPosition(y);
     setDropTargetTime(time);
   };
@@ -115,9 +120,11 @@ export function Timeline({
   const handleTimelineClick = (e: React.MouseEvent) => {
     if (!isEditable || !timelineRef.current) return;
     if ((e.target as HTMLElement).closest('.activity-card')) return;
-    
+
     const rect = timelineRef.current.getBoundingClientRect();
-    const y = e.clientY - rect.top + timelineRef.current.scrollTop;
+    const scrollParent = timelineRef.current.closest('.timeline-container') as HTMLElement | null;
+    const scrollTop = scrollParent ? scrollParent.scrollTop : 0;
+    const y = e.clientY - rect.top + scrollTop;
     const time = getTimeFromPosition(y);
     onAddActivity(time);
   };
@@ -219,6 +226,24 @@ export function Timeline({
                     <div className="activity-location">
                       <MapPin size={11} />
                       <span>{activity.location}</span>
+                      {activity.mapsUrl && (
+                        <a
+                          href={activity.mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="activity-maps-link"
+                          onClick={e => e.stopPropagation()}
+                          title="Open in Maps"
+                        >
+                          <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {activity.imageUrl && height > 80 && (
+                    <div className="activity-image-thumb">
+                      <img src={activity.imageUrl} alt={activity.title} />
                     </div>
                   )}
                 </div>
@@ -296,7 +321,6 @@ export function Timeline({
           position: relative;
           display: flex;
           min-height: ${(END_HOUR - START_HOUR) * HOUR_HEIGHT}px;
-          overflow-y: auto;
           cursor: pointer;
         }
 
@@ -540,6 +564,32 @@ export function Timeline({
           margin-top: 2px;
         }
 
+        .activity-maps-link {
+          display: flex;
+          align-items: center;
+          color: #3b82f6;
+          margin-left: 2px;
+          text-decoration: none;
+          opacity: 0.8;
+          flex-shrink: 0;
+        }
+
+        .activity-maps-link:hover { opacity: 1; }
+
+        .activity-image-thumb {
+          margin-top: 4px;
+          border-radius: 6px;
+          overflow: hidden;
+          height: 36px;
+        }
+
+        .activity-image-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
         .activity-status-dot {
           position: absolute;
           top: 8px;
@@ -629,6 +679,12 @@ function ActivityDetailPopup({
         </div>
 
         <div className="popup-body">
+          {activity.imageUrl && (
+            <div className="popup-image">
+              <img src={activity.imageUrl} alt={activity.title} />
+            </div>
+          )}
+
           <div className="popup-info-row">
             <Clock size={16} />
             <span>{activity.startTime} - {endTime}</span>
@@ -639,11 +695,50 @@ function ActivityDetailPopup({
             <div className="popup-info-row">
               <MapPin size={16} />
               <span>{activity.location}</span>
+              {activity.mapsUrl && (
+                <a
+                  href={activity.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="popup-maps-btn"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <ExternalLink size={14} />
+                  Open in Maps
+                </a>
+              )}
+            </div>
+          )}
+
+          {!activity.location && activity.mapsUrl && (
+            <div className="popup-info-row">
+              <MapPin size={16} />
+              <a
+                href={activity.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="popup-maps-btn"
+                onClick={e => e.stopPropagation()}
+              >
+                <ExternalLink size={14} />
+                Open in Maps
+              </a>
             </div>
           )}
 
           {activity.description && (
             <p className="popup-description">{activity.description}</p>
+          )}
+
+          {activity.notes && (
+            <p className="popup-notes">📝 {activity.notes}</p>
+          )}
+
+          {activity.cost != null && (
+            <div className="popup-info-row">
+              <span>💰</span>
+              <span>{activity.cost} {activity.currency || ''}</span>
+            </div>
           )}
 
           <div className="popup-status">
@@ -776,6 +871,49 @@ function ActivityDetailPopup({
 
         .popup-body {
           padding: 20px;
+        }
+
+        .popup-image {
+          border-radius: 14px;
+          overflow: hidden;
+          margin-bottom: 16px;
+        }
+
+        .popup-image img {
+          width: 100%;
+          height: 180px;
+          object-fit: cover;
+          display: block;
+        }
+
+        .popup-maps-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          margin-left: auto;
+          padding: 5px 10px;
+          background: #3b82f6;
+          color: white;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 600;
+          text-decoration: none;
+          flex-shrink: 0;
+          transition: opacity 0.15s;
+          white-space: nowrap;
+        }
+
+        .popup-maps-btn:hover { opacity: 0.88; }
+
+        .popup-notes {
+          font-size: 13px;
+          color: var(--muted-foreground);
+          background: var(--muted);
+          border-radius: 10px;
+          padding: 10px 12px;
+          margin: 12px 0 0;
+          line-height: 1.5;
+          font-style: italic;
         }
 
         .popup-info-row {

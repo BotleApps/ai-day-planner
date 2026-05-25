@@ -1,5 +1,6 @@
 // AI Provider Settings — stored in localStorage (client-side only)
 
+export type AIProvider = 'sap' | 'gemini';
 export type AIBackend = 'openai' | 'bedrock' | 'vertex';
 
 export interface AIModelOption {
@@ -11,22 +12,27 @@ export interface AIModelOption {
 
 export interface AISettings {
   enabled: boolean;
+  provider: AIProvider;
   // SAP AI Core OAuth credentials
   clientId: string;
   clientSecret: string;
   authUrl: string;       // UAA auth server URL
   apiUrl: string;        // AI_API_URL from service key
   resourceGroup: string; // usually 'default'
-  // Selected model/deployment
+  // SAP selected model/deployment
   deploymentId: string;
   backend: AIBackend;
   modelName: string;
+  // Google Gemini
+  geminiApiKey: string;
+  geminiModel: string;
 }
 
 const STORAGE_KEY = 'ai-day-planner:ai-settings';
 
 export const DEFAULT_AI_SETTINGS: AISettings = {
   enabled: false,
+  provider: 'sap',
   clientId: '',
   clientSecret: '',
   authUrl: '',
@@ -35,6 +41,8 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   deploymentId: '',
   backend: 'openai',
   modelName: '',
+  geminiApiKey: '',
+  geminiModel: '',
 };
 
 export function loadAISettings(): AISettings {
@@ -54,8 +62,11 @@ export function saveAISettings(settings: AISettings): void {
 }
 
 export function isAIConfigured(settings: AISettings): boolean {
+  if (!settings.enabled) return false;
+  if (settings.provider === 'gemini') {
+    return !!settings.geminiApiKey && !!settings.geminiModel;
+  }
   return (
-    settings.enabled &&
     !!settings.clientId &&
     !!settings.clientSecret &&
     !!settings.authUrl &&

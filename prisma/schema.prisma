@@ -82,6 +82,8 @@ model Activity {
   order           Int      @default(0)
   color           String?
   icon            String?
+  imageUrl        String?
+  mapsUrl         String?
 
   dayPlan DayPlan @relation(fields: [dayPlanId], references: [id], onDelete: Cascade)
 
@@ -193,6 +195,8 @@ model SharedChecklistAccess {
 model UserSettings {
   userId          String   @id
   aiEnabled       Boolean  @default(false)
+  provider        String   @default("sap")
+  // SAP AI Core
   clientId        String   @default("")
   clientSecretEnc String   @default("")
   authUrl         String   @default("")
@@ -201,5 +205,8 @@ model UserSettings {
   deploymentId    String   @default("")
   backend         String   @default("openai")
   modelName       String   @default("")
+  // Google Gemini
+  geminiApiKeyEnc String   @default("")
+  geminiModel     String   @default("")
   updatedAt       DateTime @updatedAt
 }

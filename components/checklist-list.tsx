@@ -101,14 +101,14 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
           className={`tab-btn${tab === 'mine' ? ' active' : ''}`}
           onClick={() => setTab('mine')}
         >
-          My Checklists
+          Mine
           {checklists.length > 0 && <span className="tab-badge">{checklists.length}</span>}
         </button>
         <button
           className={`tab-btn${tab === 'shared' ? ' active' : ''}`}
           onClick={() => setTab('shared')}
         >
-          Shared with Me
+          Shared
           {sharedChecklists.length > 0 && <span className="tab-badge">{sharedChecklists.length}</span>}
         </button>
         <button

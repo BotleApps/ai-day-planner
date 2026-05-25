@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import SessionProvider from "@/components/session-provider";
 import ServiceWorkerRegistration from "@/components/service-worker-registration";
+import { SplashScreen } from "@/components/splash-screen";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -11,15 +12,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AI Day Planner",
-  description: "Organize your day with AI-powered planning - A modern task management app",
-  keywords: ["task manager", "day planner", "productivity", "AI", "todo"],
-  authors: [{ name: "BotleApps" }],
+  title: "SortedPlan",
+  description: "AI-powered travel planning — build beautiful day-by-day itineraries, smart checklists, and share with your crew.",
+  keywords: ["travel planner", "day planner", "AI itinerary", "trip planning", "SortedPlan"],
+  authors: [{ name: "SortedPlan" }],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Day Planner",
+    title: "SortedPlan",
   },
   icons: {
     icon: [
@@ -60,6 +61,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange={false}
           >
+            <SplashScreen />
             {children}
           </ThemeProvider>
         </SessionProvider>

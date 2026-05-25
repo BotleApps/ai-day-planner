@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/sap-ai-core';
+import { geminiChat } from '@/lib/gemini';
 import { AISettings } from '@/lib/ai-settings';
 import { Activity, PlanPreferences } from '@/lib/types';
 
@@ -53,7 +54,6 @@ Only include "startTime" when it makes sense contextually. Duration is in minute
 }
 
 function parseAIResponse(raw: string): { message: string; suggestions: Partial<Activity>[] } {
-  // Strip markdown code fences if present
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   try {
     const parsed = JSON.parse(cleaned);
@@ -62,9 +62,18 @@ function parseAIResponse(raw: string): { message: string; suggestions: Partial<A
       suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
     };
   } catch {
-    // AI didn't return valid JSON — return raw as message with no suggestions
     return { message: raw.slice(0, 500), suggestions: [] };
   }
+}
+
+async function runChat(settings: AISettings, systemPrompt: string, userMessage: string): Promise<string> {
+  if (settings.provider === 'gemini') {
+    if (!settings.geminiApiKey || !settings.geminiModel) {
+      throw new Error('Gemini API key and model are required');
+    }
+    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage);
+  }
+  return chat(settings, systemPrompt, userMessage);
 }
 
 export async function POST(req: NextRequest) {
@@ -81,18 +90,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'message and settings are required' }, { status: 400 });
   }
 
-  if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
-    return NextResponse.json({ error: 'SAP AI Core is not fully configured' }, { status: 400 });
+  if (settings.provider === 'gemini') {
+    if (!settings.geminiApiKey || !settings.geminiModel) {
+      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
+    }
+  } else {
+    if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
+      return NextResponse.json({ error: 'SAP AI Core is not fully configured' }, { status: 400 });
+    }
   }
 
   try {
     const systemPrompt = buildSystemPrompt(context || {});
-    const raw = await chat(settings, systemPrompt, message);
+    const raw = await runChat(settings, systemPrompt, message);
     const result = parseAIResponse(raw);
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('SAP AI Core chat error:', message);
-    return NextResponse.json({ error: message }, { status: 502 });
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('AI chat error:', msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

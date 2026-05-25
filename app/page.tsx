@@ -2,6 +2,8 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { LandingPage } from '@/components/landing-page';
 import HomePage from '@/components/home-page';
 import PlanView from '@/components/plan-view';
 import ChecklistDetail from '@/components/checklist-detail';
@@ -9,6 +11,7 @@ import CreatePlanModal from '@/components/create-plan-modal';
 import CreateChecklistModal from '@/components/create-checklist-modal';
 
 function HomeContent() {
+  const { status } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -74,6 +77,8 @@ function HomeContent() {
   };
 
   if (selectedPlanId || shareToken) {
+    // Share links work without auth
+    if (status === 'unauthenticated' && !shareToken) return <LandingPage />;
     return (
       <PlanView
         planId={selectedPlanId ?? ''}
@@ -84,6 +89,7 @@ function HomeContent() {
   }
 
   if (selectedChecklistId || checklistShareToken) {
+    if (status === 'unauthenticated' && !checklistShareToken) return <LandingPage />;
     return (
       <ChecklistDetail
         checklistId={selectedChecklistId ?? undefined}
@@ -92,6 +98,10 @@ function HomeContent() {
       />
     );
   }
+
+  // Show landing page when not authenticated
+  if (status === 'loading') return null;
+  if (status === 'unauthenticated') return <LandingPage />;
 
   return (
     <>
@@ -130,7 +140,7 @@ export default function Home() {
             <div className="h-12 w-12 rounded-full border-4 border-indigo-200 dark:border-indigo-900" />
             <div className="absolute top-0 left-0 h-12 w-12 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" />
           </div>
-          <p className="mt-4 text-muted-foreground font-medium">Loading AI Day Planner...</p>
+          <p className="mt-4 text-muted-foreground font-medium">Loading SortedPlan...</p>
         </div>
       </div>
     }>

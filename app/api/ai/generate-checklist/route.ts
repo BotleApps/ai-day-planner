@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chat } from '@/lib/sap-ai-core';
+import { geminiChat } from '@/lib/gemini';
 import { AISettings } from '@/lib/ai-settings';
 import { AIChecklistGenerationResult } from '@/lib/types';
 
@@ -37,7 +38,6 @@ function parseAIChecklistResponse(raw: string): AIChecklistGenerationResult | nu
     if (parsed.title && Array.isArray(parsed.groups)) {
       return parsed as AIChecklistGenerationResult;
     }
-    // Fallback: flat items array
     if (Array.isArray(parsed.items)) {
       return {
         title: parsed.title || 'Checklist',
@@ -48,6 +48,16 @@ function parseAIChecklistResponse(raw: string): AIChecklistGenerationResult | nu
   } catch {
     return null;
   }
+}
+
+async function runChat(settings: AISettings, systemPrompt: string, userMessage: string): Promise<string> {
+  if (settings.provider === 'gemini') {
+    if (!settings.geminiApiKey || !settings.geminiModel) {
+      throw new Error('Gemini API key and model are required');
+    }
+    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage);
+  }
+  return chat(settings, systemPrompt, userMessage);
 }
 
 export async function POST(req: NextRequest) {
@@ -64,8 +74,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'description and settings are required' }, { status: 400 });
   }
 
-  if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
-    return NextResponse.json({ error: 'SAP AI Core is not fully configured' }, { status: 400 });
+  if (settings.provider === 'gemini') {
+    if (!settings.geminiApiKey || !settings.geminiModel) {
+      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
+    }
+  } else {
+    if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
+      return NextResponse.json({ error: 'SAP AI Core is not fully configured' }, { status: 400 });
+    }
   }
 
   const contextNote = planContext?.title
@@ -73,7 +89,7 @@ export async function POST(req: NextRequest) {
     : '';
 
   try {
-    const raw = await chat(settings, SYSTEM_PROMPT + contextNote, description);
+    const raw = await runChat(settings, SYSTEM_PROMPT + contextNote, description);
     const result = parseAIChecklistResponse(raw);
     if (!result) {
       return NextResponse.json({ error: 'Could not parse AI response. Please try again.' }, { status: 502 });

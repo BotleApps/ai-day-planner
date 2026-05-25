@@ -27,6 +27,8 @@ function shapeActivity(act: any) {
     order: act.order,
     color: act.color ?? undefined,
     icon: act.icon ?? undefined,
+    imageUrl: act.imageUrl ?? undefined,
+    mapsUrl: act.mapsUrl ?? undefined,
   };
 }
 
@@ -117,6 +119,8 @@ export async function POST(request: Request) {
         order: activity.order ?? 0,
         color: activity.color,
         icon: activity.icon,
+        imageUrl: activity.imageUrl,
+        mapsUrl: activity.mapsUrl,
       },
     });
 
@@ -154,6 +158,7 @@ export async function PUT(request: Request) {
       'title', 'description', 'type', 'startTime', 'duration', 'endTime',
       'location', 'address', 'status', 'priority', 'notes', 'cost',
       'currency', 'weatherDependent', 'isBreak', 'aiSuggested', 'order', 'color', 'icon',
+      'imageUrl', 'mapsUrl',
     ];
     for (const key of allowed) {
       if (updates && key in updates) data[key] = updates[key];
@@ -262,6 +267,8 @@ export async function PATCH(request: Request) {
             order: a.order,
             color: a.color,
             icon: a.icon,
+            imageUrl: a.imageUrl,
+            mapsUrl: a.mapsUrl,
           })),
         });
       }

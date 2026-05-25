@@ -104,7 +104,7 @@
 
 html,
 body {
-  min-height: 100dvh;
+  height: 100%;
 }
 
 body {
@@ -348,11 +348,13 @@ body {
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  height: 100%;
 }
 
 body {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
+  height: 100%;
 }
 
 /* Remove tap highlight on mobile */

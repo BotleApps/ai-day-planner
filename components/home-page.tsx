@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { ChecklistList } from './checklist-list';
 import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { OnboardingModal } from '@/components/onboarding-modal';
 
 interface HomePageProps {
   onSelectPlan: (planId: string) => void;
@@ -136,6 +137,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
   return (
     <div className="home-container">
+      <OnboardingModal />
       {/* Header */}
       <header className="header">
         <div className="header-content">
@@ -143,7 +145,9 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             <div className="logo-icon">
               <Sparkles size={20} />
             </div>
-            <span>Day Planner</span>
+            <span>
+              {section === 'plans' ? 'Plans' : section === 'checklists' ? 'Checklists' : 'Profile'}
+            </span>
           </div>
           <div className="header-actions">
             {section === 'plans' && hasAnyPlans && (
@@ -302,7 +306,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                 className={`tab-btn${tab === 'mine' ? ' active' : ''}`}
                 onClick={() => setTab('mine')}
               >
-                My Plans
+                Mine
                 {plans.length > 0 && <span className="tab-badge">{plans.length}</span>}
               </button>
               <button
@@ -310,7 +314,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                 onClick={() => setTab('shared')}
               >
                 <Users size={14} />
-                Shared with Me
+                Shared
                 {sharedPlans.length > 0 && <span className="tab-badge">{sharedPlans.length}</span>}
               </button>
             </div>
@@ -544,10 +548,12 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
       <style jsx>{`
         .home-container {
-          min-height: 100dvh;
+          height: 100dvh;
           background: var(--background);
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+          position: relative;
         }
 
         /* Header */
@@ -679,7 +685,12 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           flex: 1;
           display: flex;
           flex-direction: column;
-          padding-bottom: 72px; /* space for bottom nav */
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+          min-height: 0;
         }
 
         /* Loading State */
@@ -887,7 +898,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
         /* Bottom Navigation */
         .bottom-nav {
-          position: fixed;
+          position: absolute;
           bottom: 0;
           left: 0;
           right: 0;
@@ -896,6 +907,8 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           background: var(--card);
           border-top: 1px solid var(--border);
           padding-bottom: env(safe-area-inset-bottom, 0px);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
         }
 
         .nav-item {

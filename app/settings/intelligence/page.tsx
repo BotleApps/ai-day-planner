@@ -13,8 +13,11 @@ import {
   Loader2,
   Bot,
   Trash2,
+  ExternalLink,
+  Key,
 } from 'lucide-react';
 import {
+  AIProvider,
   AISettings,
   AIModelOption,
   loadAISettings,
@@ -23,16 +26,17 @@ import {
   saveAISettingsToServer,
   DEFAULT_AI_SETTINGS,
 } from '@/lib/ai-settings';
+import type { GeminiModel } from '@/lib/gemini';
 
 type Status = 'idle' | 'testing' | 'success' | 'error';
 
-const BACKEND_LABEL: Record<string, string> = {
+const SAP_BACKEND_LABEL: Record<string, string> = {
   openai: 'Azure OpenAI',
   bedrock: 'AWS Bedrock',
   vertex: 'Google Vertex AI',
 };
 
-const BACKEND_COLOR: Record<string, string> = {
+const SAP_BACKEND_COLOR: Record<string, string> = {
   openai: '#0078d4',
   bedrock: '#ff9900',
   vertex: '#4285f4',
@@ -41,21 +45,31 @@ const BACKEND_COLOR: Record<string, string> = {
 export default function IntelligencePage() {
   const router = useRouter();
   const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
-  const [models, setModels] = useState<AIModelOption[]>([]);
-  const [status, setStatus] = useState<Status>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [activeTab, setActiveTab] = useState<AIProvider>('sap');
+
+  // SAP state
+  const [sapModels, setSapModels] = useState<AIModelOption[]>([]);
+  const [sapStatus, setSapStatus] = useState<Status>('idle');
+  const [sapError, setSapError] = useState('');
   const [showSecret, setShowSecret] = useState(false);
-  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [isDiscoveringSap, setIsDiscoveringSap] = useState(false);
+
+  // Gemini state
+  const [geminiModels, setGeminiModels] = useState<GeminiModel[]>([]);
+  const [geminiStatus, setGeminiStatus] = useState<Status>('idle');
+  const [geminiError, setGeminiError] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isFetchingGemini, setIsFetchingGemini] = useState(false);
+
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    // Load localStorage immediately (no flash)
     setSettings(loadAISettings());
-    // Then sync from server (authoritative, cross-device)
     loadAISettingsFromServer().then(serverSettings => {
-      if (serverSettings.clientId || serverSettings.deploymentId) {
+      if (serverSettings.clientId || serverSettings.deploymentId || serverSettings.geminiApiKey) {
         setSettings(serverSettings);
-        saveAISettings(serverSettings); // refresh local cache
+        saveAISettings(serverSettings);
+        setActiveTab(serverSettings.provider || 'sap');
       }
     });
   }, []);
@@ -65,8 +79,13 @@ export default function IntelligencePage() {
     setSaved(false);
   };
 
+  const handleTabChange = (tab: AIProvider) => {
+    setActiveTab(tab);
+    update({ provider: tab });
+  };
+
   const handleSave = async () => {
-    await saveAISettingsToServer({ ...settings, enabled: true });
+    await saveAISettingsToServer({ ...settings, provider: activeTab, enabled: true });
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -78,21 +97,24 @@ export default function IntelligencePage() {
     const reset = { ...DEFAULT_AI_SETTINGS, enabled: false };
     await saveAISettingsToServer(reset);
     setSettings(reset);
-    setModels([]);
-    setStatus('idle');
+    setSapModels([]);
+    setGeminiModels([]);
+    setSapStatus('idle');
+    setGeminiStatus('idle');
     router.push('/settings');
   };
 
-  const handleDiscover = async () => {
+  // ── SAP discovery ──────────────────────────────────────────────────────
+  const handleDiscoverSap = async () => {
     if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl) {
-      setStatus('error');
-      setErrorMsg('Fill in Client ID, Client Secret, Auth URL and API URL first.');
+      setSapStatus('error');
+      setSapError('Fill in Client ID, Client Secret, Auth URL and API URL first.');
       return;
     }
-    setIsDiscovering(true);
-    setStatus('testing');
-    setErrorMsg('');
-    setModels([]);
+    setIsDiscoveringSap(true);
+    setSapStatus('testing');
+    setSapError('');
+    setSapModels([]);
 
     try {
       const resp = await fetch('/api/ai/models', {
@@ -108,29 +130,73 @@ export default function IntelligencePage() {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setStatus('error');
-        setErrorMsg(data.error || `HTTP ${resp.status}`);
+        setSapStatus('error');
+        setSapError(data.error || `HTTP ${resp.status}`);
         return;
       }
-      setModels(data.models || []);
-      setStatus('success');
+      setSapModels(data.models || []);
+      setSapStatus('success');
       if (!settings.deploymentId && data.models?.length > 0) {
         const first = data.models[0];
         update({ deploymentId: first.deploymentId, backend: first.backend, modelName: first.name });
       }
     } catch (err) {
-      setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : 'Network error');
+      setSapStatus('error');
+      setSapError(err instanceof Error ? err.message : 'Network error');
     } finally {
-      setIsDiscovering(false);
+      setIsDiscoveringSap(false);
     }
   };
 
-  const handleSelectModel = (m: AIModelOption) => {
+  const handleSelectSapModel = (m: AIModelOption) => {
     update({ deploymentId: m.deploymentId, backend: m.backend, modelName: m.name });
   };
 
-  const isConnected = !!settings.deploymentId && status === 'idle' && !!settings.clientId;
+  // ── Gemini model fetch ─────────────────────────────────────────────────
+  const handleFetchGeminiModels = async () => {
+    if (!settings.geminiApiKey?.trim()) {
+      setGeminiStatus('error');
+      setGeminiError('Enter your Google AI Studio API key first.');
+      return;
+    }
+    setIsFetchingGemini(true);
+    setGeminiStatus('testing');
+    setGeminiError('');
+    setGeminiModels([]);
+
+    try {
+      const resp = await fetch('/api/ai/gemini-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: settings.geminiApiKey }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setGeminiStatus('error');
+        setGeminiError(data.error || `HTTP ${resp.status}`);
+        return;
+      }
+      setGeminiModels(data.models || []);
+      setGeminiStatus('success');
+      if (!settings.geminiModel && data.models?.length > 0) {
+        update({ geminiModel: data.models[0].name });
+      }
+    } catch (err) {
+      setGeminiStatus('error');
+      setGeminiError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setIsFetchingGemini(false);
+    }
+  };
+
+  const handleSelectGeminiModel = (m: GeminiModel) => {
+    update({ geminiModel: m.name });
+  };
+
+  const isConnected =
+    activeTab === 'sap'
+      ? !!settings.deploymentId && !!settings.clientId
+      : !!settings.geminiModel && !!settings.geminiApiKey;
 
   return (
     <div className="page">
@@ -140,7 +206,7 @@ export default function IntelligencePage() {
           <ArrowLeft size={18} />
           Settings
         </button>
-        <h1>SAP AI Core</h1>
+        <h1>AI Intelligence</h1>
         <button
           className={`save-btn ${saved ? 'saving' : ''}`}
           onClick={handleSave}
@@ -153,16 +219,43 @@ export default function IntelligencePage() {
 
       <div className="scroll">
 
+        {/* Provider tabs */}
+        <div className="tab-row">
+          <button
+            className={`tab-btn ${activeTab === 'sap' ? 'active' : ''}`}
+            onClick={() => handleTabChange('sap')}
+          >
+            <span className="tab-dot sap-dot" />
+            SAP AI Core
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'gemini' ? 'active' : ''}`}
+            onClick={() => handleTabChange('gemini')}
+          >
+            <span className="tab-dot gemini-dot" />
+            Google Gemini
+          </button>
+        </div>
+
         {/* Provider badge */}
         <div className="provider-row">
-          <div className="provider-icon">
+          <div className={`provider-icon ${activeTab === 'gemini' ? 'gemini-icon' : ''}`}>
             <Bot size={22} />
           </div>
           <div className="provider-info">
-            <span className="provider-name">SAP AI Core</span>
-            <span className="provider-subtitle">Generative AI Hub — GPT · Claude · Gemini</span>
+            {activeTab === 'sap' ? (
+              <>
+                <span className="provider-name">SAP AI Core</span>
+                <span className="provider-subtitle">Generative AI Hub — GPT · Claude · Gemini</span>
+              </>
+            ) : (
+              <>
+                <span className="provider-name">Google Gemini</span>
+                <span className="provider-subtitle">Gemini 2.5 Pro · Flash · and more</span>
+              </>
+            )}
           </div>
-          {settings.deploymentId && (
+          {isConnected && (
             <span className="connected-badge">
               <CheckCircle2 size={12} />
               Connected
@@ -170,162 +263,269 @@ export default function IntelligencePage() {
           )}
         </div>
 
-        {/* ── Credentials ───────────────────────── */}
-        <div className="group-label">Service Key</div>
-        <div className="group">
-          <div className="field-row">
-            <label>Auth URL</label>
-            <input
-              type="url"
-              value={settings.authUrl}
-              onChange={e => update({ authUrl: e.target.value })}
-              placeholder="https://subdomain.authentication.eu10.hana.ondemand.com"
-              autoComplete="off"
-            />
-            <span className="hint">The <code>url</code> field in your service key</span>
-          </div>
-          <div className="sep" />
-          <div className="field-row">
-            <label>API URL</label>
-            <input
-              type="url"
-              value={settings.apiUrl}
-              onChange={e => update({ apiUrl: e.target.value })}
-              placeholder="https://api.ai.prod.eu-central-1.aws.ml.hana.ondemand.com"
-              autoComplete="off"
-            />
-            <span className="hint">The <code>serviceurls.AI_API_URL</code> field</span>
-          </div>
-          <div className="sep" />
-          <div className="field-row">
-            <label>Client ID</label>
-            <input
-              type="text"
-              value={settings.clientId}
-              onChange={e => update({ clientId: e.target.value })}
-              placeholder="sb-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx!b..."
-              autoComplete="off"
-            />
-          </div>
-          <div className="sep" />
-          <div className="field-row">
-            <label>Client Secret</label>
-            <div className="secret-wrap">
-              <input
-                type={showSecret ? 'text' : 'password'}
-                value={settings.clientSecret}
-                onChange={e => update({ clientSecret: e.target.value })}
-                placeholder="••••••••••••••••"
-                autoComplete="new-password"
-              />
-              <button className="eye-btn" onClick={() => setShowSecret(p => !p)} type="button">
-                {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-          <div className="sep" />
-          <div className="field-row">
-            <label>Resource Group</label>
-            <input
-              type="text"
-              value={settings.resourceGroup}
-              onChange={e => update({ resourceGroup: e.target.value })}
-              placeholder="default"
-            />
-            <span className="hint">Usually <code>default</code></span>
-          </div>
-        </div>
-
-        {/* ── Model discovery ────────────────────── */}
-        <div className="group-label">Model</div>
-        <div className="group">
-          {/* Discover button row */}
-          <div className="discover-row">
-            <button
-              className="discover-btn"
-              onClick={handleDiscover}
-              disabled={isDiscovering}
-            >
-              {isDiscovering
-                ? <Loader2 size={15} className="spin" />
-                : <RefreshCw size={15} />}
-              {isDiscovering ? 'Connecting…' : 'Discover Deployments'}
-            </button>
-
-            {status === 'success' && (
-              <span className="chip ok">
-                <CheckCircle2 size={12} />
-                {models.length} found
-              </span>
-            )}
-            {status === 'error' && (
-              <span className="chip err">
-                <XCircle size={12} />
-                Failed
-              </span>
-            )}
-          </div>
-
-          {status === 'error' && errorMsg && (
-            <div className="error-banner">
-              <XCircle size={13} />
-              {errorMsg}
-            </div>
-          )}
-
-          {/* Model list after discovery */}
-          {models.length > 0 && (
-            <div className="model-list">
-              {models.map((m, i) => (
-                <div key={m.deploymentId}>
-                  {i > 0 && <div className="sep" />}
-                  <button
-                    className={`model-row ${settings.deploymentId === m.deploymentId ? 'selected' : ''}`}
-                    onClick={() => handleSelectModel(m)}
-                  >
-                    <div className="model-left">
-                      <span
-                        className="backend-dot"
-                        style={{ background: BACKEND_COLOR[m.backend] || '#888' }}
-                      />
-                      <div className="model-info">
-                        <span className="model-name">{m.name}</span>
-                        <span className="model-backend">{BACKEND_LABEL[m.backend] || m.backend}</span>
-                      </div>
-                    </div>
-                    {settings.deploymentId === m.deploymentId && (
-                      <CheckCircle2 size={17} className="model-check" />
-                    )}
+        {/* ── SAP AI CORE TAB ───────────────────────────────────────────── */}
+        {activeTab === 'sap' && (
+          <>
+            <div className="group-label">Service Key</div>
+            <div className="group">
+              <div className="field-row">
+                <label>Auth URL</label>
+                <input
+                  type="url"
+                  value={settings.authUrl}
+                  onChange={e => update({ authUrl: e.target.value })}
+                  placeholder="https://subdomain.authentication.eu10.hana.ondemand.com"
+                  autoComplete="off"
+                />
+                <span className="hint">The <code>url</code> field in your service key</span>
+              </div>
+              <div className="sep" />
+              <div className="field-row">
+                <label>API URL</label>
+                <input
+                  type="url"
+                  value={settings.apiUrl}
+                  onChange={e => update({ apiUrl: e.target.value })}
+                  placeholder="https://api.ai.prod.eu-central-1.aws.ml.hana.ondemand.com"
+                  autoComplete="off"
+                />
+                <span className="hint">The <code>serviceurls.AI_API_URL</code> field</span>
+              </div>
+              <div className="sep" />
+              <div className="field-row">
+                <label>Client ID</label>
+                <input
+                  type="text"
+                  value={settings.clientId}
+                  onChange={e => update({ clientId: e.target.value })}
+                  placeholder="sb-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx!b..."
+                  autoComplete="off"
+                />
+              </div>
+              <div className="sep" />
+              <div className="field-row">
+                <label>Client Secret</label>
+                <div className="secret-wrap">
+                  <input
+                    type={showSecret ? 'text' : 'password'}
+                    value={settings.clientSecret}
+                    onChange={e => update({ clientSecret: e.target.value })}
+                    placeholder="••••••••••••••••"
+                    autoComplete="new-password"
+                  />
+                  <button className="eye-btn" onClick={() => setShowSecret(p => !p)} type="button">
+                    {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Saved model summary (before discover) */}
-          {models.length === 0 && settings.deploymentId && status === 'idle' && (
-            <div className="saved-row">
-              <span
-                className="backend-dot"
-                style={{ background: BACKEND_COLOR[settings.backend] || '#888' }}
-              />
-              <div className="model-info">
-                <span className="model-name">{settings.modelName || settings.deploymentId}</span>
-                <span className="model-backend">{BACKEND_LABEL[settings.backend] || settings.backend}</span>
               </div>
-              <CheckCircle2 size={16} className="model-check" />
+              <div className="sep" />
+              <div className="field-row">
+                <label>Resource Group</label>
+                <input
+                  type="text"
+                  value={settings.resourceGroup}
+                  onChange={e => update({ resourceGroup: e.target.value })}
+                  placeholder="default"
+                />
+                <span className="hint">Usually <code>default</code></span>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* ── Danger zone ───────────────────────── */}
-        {(settings.deploymentId || settings.clientId) && (
+            <div className="group-label">Model</div>
+            <div className="group">
+              <div className="discover-row">
+                <button
+                  className="discover-btn"
+                  onClick={handleDiscoverSap}
+                  disabled={isDiscoveringSap}
+                >
+                  {isDiscoveringSap
+                    ? <Loader2 size={15} className="spin" />
+                    : <RefreshCw size={15} />}
+                  {isDiscoveringSap ? 'Connecting…' : 'Discover Deployments'}
+                </button>
+                {sapStatus === 'success' && (
+                  <span className="chip ok">
+                    <CheckCircle2 size={12} />
+                    {sapModels.length} found
+                  </span>
+                )}
+                {sapStatus === 'error' && (
+                  <span className="chip err">
+                    <XCircle size={12} />
+                    Failed
+                  </span>
+                )}
+              </div>
+
+              {sapStatus === 'error' && sapError && (
+                <div className="error-banner">
+                  <XCircle size={13} />
+                  {sapError}
+                </div>
+              )}
+
+              {sapModels.length > 0 && (
+                <div className="model-list">
+                  {sapModels.map((m, i) => (
+                    <div key={m.deploymentId}>
+                      {i > 0 && <div className="sep" />}
+                      <button
+                        className={`model-row ${settings.deploymentId === m.deploymentId ? 'selected' : ''}`}
+                        onClick={() => handleSelectSapModel(m)}
+                      >
+                        <div className="model-left">
+                          <span
+                            className="backend-dot"
+                            style={{ background: SAP_BACKEND_COLOR[m.backend] || '#888' }}
+                          />
+                          <div className="model-info">
+                            <span className="model-name">{m.name}</span>
+                            <span className="model-backend">{SAP_BACKEND_LABEL[m.backend] || m.backend}</span>
+                          </div>
+                        </div>
+                        {settings.deploymentId === m.deploymentId && (
+                          <CheckCircle2 size={17} className="model-check" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {sapModels.length === 0 && settings.deploymentId && sapStatus === 'idle' && (
+                <div className="saved-row">
+                  <span
+                    className="backend-dot"
+                    style={{ background: SAP_BACKEND_COLOR[settings.backend] || '#888' }}
+                  />
+                  <div className="model-info">
+                    <span className="model-name">{settings.modelName || settings.deploymentId}</span>
+                    <span className="model-backend">{SAP_BACKEND_LABEL[settings.backend] || settings.backend}</span>
+                  </div>
+                  <CheckCircle2 size={16} className="model-check" />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── GOOGLE GEMINI TAB ─────────────────────────────────────────── */}
+        {activeTab === 'gemini' && (
+          <>
+            {/* Get API key link */}
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="studio-link"
+            >
+              <Key size={15} />
+              Get API key from Google AI Studio
+              <ExternalLink size={13} className="ext-icon" />
+            </a>
+
+            <div className="group-label">API Key</div>
+            <div className="group">
+              <div className="field-row">
+                <label>Google AI Studio Key</label>
+                <div className="secret-wrap">
+                  <input
+                    type={showGeminiKey ? 'text' : 'password'}
+                    value={settings.geminiApiKey}
+                    onChange={e => update({ geminiApiKey: e.target.value })}
+                    placeholder="AIza••••••••••••••••••••••••••••••••••••••"
+                    autoComplete="new-password"
+                  />
+                  <button className="eye-btn" onClick={() => setShowGeminiKey(p => !p)} type="button">
+                    {showGeminiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <span className="hint">Paste your API key from Google AI Studio</span>
+              </div>
+            </div>
+
+            <div className="group-label">Model</div>
+            <div className="group">
+              <div className="discover-row">
+                <button
+                  className="discover-btn gemini-discover-btn"
+                  onClick={handleFetchGeminiModels}
+                  disabled={isFetchingGemini}
+                >
+                  {isFetchingGemini
+                    ? <Loader2 size={15} className="spin" />
+                    : <RefreshCw size={15} />}
+                  {isFetchingGemini ? 'Loading…' : 'Load Available Models'}
+                </button>
+                {geminiStatus === 'success' && (
+                  <span className="chip ok">
+                    <CheckCircle2 size={12} />
+                    {geminiModels.length} models
+                  </span>
+                )}
+                {geminiStatus === 'error' && (
+                  <span className="chip err">
+                    <XCircle size={12} />
+                    Failed
+                  </span>
+                )}
+              </div>
+
+              {geminiStatus === 'error' && geminiError && (
+                <div className="error-banner">
+                  <XCircle size={13} />
+                  {geminiError}
+                </div>
+              )}
+
+              {geminiModels.length > 0 && (
+                <div className="model-list">
+                  {geminiModels.map((m, i) => (
+                    <div key={m.name}>
+                      {i > 0 && <div className="sep" />}
+                      <button
+                        className={`model-row ${settings.geminiModel === m.name ? 'selected' : ''}`}
+                        onClick={() => handleSelectGeminiModel(m)}
+                      >
+                        <div className="model-left">
+                          <span className="backend-dot" style={{ background: '#4285f4' }} />
+                          <div className="model-info">
+                            <span className="model-name">{m.displayName}</span>
+                            <span className="model-backend">{m.name}</span>
+                          </div>
+                        </div>
+                        {settings.geminiModel === m.name && (
+                          <CheckCircle2 size={17} className="model-check" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {geminiModels.length === 0 && settings.geminiModel && geminiStatus === 'idle' && (
+                <div className="saved-row">
+                  <span className="backend-dot" style={{ background: '#4285f4' }} />
+                  <div className="model-info">
+                    <span className="model-name">{settings.geminiModel}</span>
+                    <span className="model-backend">Google Gemini</span>
+                  </div>
+                  <CheckCircle2 size={16} className="model-check" />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Disconnect ─────────────────────────────────────────────────── */}
+        {(settings.deploymentId || settings.clientId || settings.geminiApiKey || settings.geminiModel) && (
           <>
             <div className="group-label">Manage</div>
             <div className="group">
               <button className="danger-row" onClick={handleDisconnect}>
                 <Trash2 size={16} />
-                Disconnect & Clear Configuration
+                Disconnect & Clear All Configuration
               </button>
             </div>
           </>
@@ -344,7 +544,6 @@ export default function IntelligencePage() {
           flex-direction: column;
         }
 
-        /* Header */
         .header {
           display: flex;
           align-items: center;
@@ -398,13 +597,51 @@ export default function IntelligencePage() {
         .save-btn:hover:not(:disabled) { opacity: 0.88; }
         .save-btn.saving { background: #10b981; }
 
-        /* Scroll area */
         .scroll {
           max-width: 540px;
           width: 100%;
           margin: 0 auto;
           padding: 24px 20px 56px;
         }
+
+        /* Provider tabs */
+        .tab-row {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 20px;
+          background: var(--muted);
+          border-radius: 12px;
+          padding: 4px;
+        }
+        .tab-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          padding: 9px 12px;
+          border: none;
+          border-radius: 9px;
+          background: transparent;
+          color: var(--muted-foreground);
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.18s;
+        }
+        .tab-btn.active {
+          background: var(--card);
+          color: var(--foreground);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .tab-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .sap-dot  { background: #00c2a8; }
+        .gemini-dot { background: #4285f4; }
 
         /* Provider row */
         .provider-row {
@@ -430,6 +667,10 @@ export default function IntelligencePage() {
           justify-content: center;
           color: var(--primary);
           flex-shrink: 0;
+        }
+        .provider-icon.gemini-icon {
+          background: linear-gradient(135deg, #e8f0fe, #d2e3fc);
+          color: #4285f4;
         }
         .provider-info { flex: 1; }
         .provider-name {
@@ -459,6 +700,27 @@ export default function IntelligencePage() {
           flex-shrink: 0;
         }
 
+        /* Google AI Studio link */
+        .studio-link {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: color-mix(in srgb, #4285f4 8%, var(--card));
+          border: 1px solid color-mix(in srgb, #4285f4 25%, transparent);
+          border-radius: 12px;
+          color: #4285f4;
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+          margin-bottom: 20px;
+          transition: background 0.15s;
+        }
+        .studio-link:hover {
+          background: color-mix(in srgb, #4285f4 14%, var(--card));
+        }
+        .ext-icon { margin-left: auto; opacity: 0.7; }
+
         /* Group label */
         .group-label {
           font-size: 11px;
@@ -470,7 +732,6 @@ export default function IntelligencePage() {
           margin-top: 24px;
         }
 
-        /* Group card */
         .group {
           background: var(--card);
           border: 1px solid var(--border);
@@ -478,10 +739,8 @@ export default function IntelligencePage() {
           overflow: hidden;
         }
 
-        /* Separator */
         .sep { height: 1px; background: var(--border); margin: 0 16px; }
 
-        /* Field rows */
         .field-row {
           display: flex;
           flex-direction: column;
@@ -536,7 +795,6 @@ export default function IntelligencePage() {
         }
         .eye-btn:hover { color: var(--foreground); }
 
-        /* Discover row */
         .discover-row {
           display: flex;
           align-items: center;
@@ -558,6 +816,7 @@ export default function IntelligencePage() {
           cursor: pointer;
           transition: opacity 0.15s;
         }
+        .gemini-discover-btn { background: #4285f4; }
         .discover-btn:hover:not(:disabled) { opacity: 0.88; }
         .discover-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .spin { animation: spin 1s linear infinite; }
@@ -597,7 +856,6 @@ export default function IntelligencePage() {
           line-height: 1.4;
         }
 
-        /* Model list */
         .model-list { padding: 0; }
         .model-row {
           display: flex;
@@ -644,7 +902,6 @@ export default function IntelligencePage() {
         }
         .model-check { color: var(--primary); flex-shrink: 0; }
 
-        /* Danger row */
         .danger-row {
           display: flex;
           align-items: center;
@@ -662,7 +919,6 @@ export default function IntelligencePage() {
         }
         .danger-row:hover { background: color-mix(in srgb, #ef4444 8%, var(--card)); }
 
-        /* Privacy note */
         .privacy {
           font-size: 12px;
           color: var(--muted-foreground);

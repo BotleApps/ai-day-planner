@@ -1,0 +1,41 @@
+_schema-version: "3.3.0"
+ID: ai-day-planner
+extends: ai-day-planner
+
+# ==============================================================================
+# Development MTA Extension Descriptor
+# Environment : DEV
+# CF API      : https://api.cf.eu12.hana.ondemand.com
+# CF Org      : SLIAchieve_sli-md-office-fyhziaa8
+# CF Space    : ai-day-plan
+# App URL     : https://www.sortedplan.com
+# ==============================================================================
+
+modules:
+  - name: ai-day-planner
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      instances: 1
+      routes:
+        - route: ai-day-planner.cfapps.eu12.hana.ondemand.com
+        - route: www.sortedplan.com
+      buildpack: nodejs_buildpack
+      health-check-type: http
+      health-check-http-endpoint: /api/health
+      command: node server.js
+    properties:
+      NODE_ENV: development
+    requires:
+      - name: ai-day-planner-db
+        parameters:
+          service-binding-name: ai-day-planner-db
+
+resources:
+  - name: ai-day-planner-db
+    parameters:
+      service:      postgresql-db
+      service-plan: development
+      service-name: ai-day-planner-db
+      config:
+        engine: postgres

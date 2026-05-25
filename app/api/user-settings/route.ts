@@ -21,6 +21,7 @@ export async function GET() {
 
     const settings = {
       enabled: row.aiEnabled,
+      provider: row.provider || 'sap',
       clientId: row.clientId,
       clientSecret: decrypt(row.clientSecretEnc),
       authUrl: row.authUrl,
@@ -29,6 +30,8 @@ export async function GET() {
       deploymentId: row.deploymentId,
       backend: row.backend,
       modelName: row.modelName,
+      geminiApiKey: decrypt(row.geminiApiKeyEnc),
+      geminiModel: row.geminiModel,
     };
 
     return NextResponse.json({ settings });
@@ -47,12 +50,15 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
     const {
-      enabled, clientId, clientSecret, authUrl, apiUrl,
+      enabled, provider,
+      clientId, clientSecret, authUrl, apiUrl,
       resourceGroup, deploymentId, backend, modelName,
+      geminiApiKey, geminiModel,
     } = body;
 
     const data = {
       aiEnabled: !!enabled,
+      provider: provider || 'sap',
       clientId: clientId || '',
       clientSecretEnc: clientSecret ? encrypt(clientSecret) : '',
       authUrl: authUrl || '',
@@ -61,6 +67,8 @@ export async function PUT(request: Request) {
       deploymentId: deploymentId || '',
       backend: backend || 'openai',
       modelName: modelName || '',
+      geminiApiKeyEnc: geminiApiKey ? encrypt(geminiApiKey) : '',
+      geminiModel: geminiModel || '',
     };
 
     await prisma.userSettings.upsert({

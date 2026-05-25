@@ -10,7 +10,7 @@ export default function SignInClient() {
         <div className="logo-icon">
           <Sparkles size={28} />
         </div>
-        <h1>AI Day Planner</h1>
+        <h1>SortedPlan</h1>
         <p>Sign in to create and manage your travel plans</p>
 
         <button

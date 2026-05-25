@@ -54,6 +54,8 @@ export interface Activity {
   order: number;                 // Position in timeline
   color?: string;                // Custom color
   icon?: string;                 // Custom icon
+  imageUrl?: string;             // Photo of the place/activity
+  mapsUrl?: string;              // Google Maps / Apple Maps link
   tags?: string[];
   links?: string[];              // URLs, booking links
   reminders?: number[];          // Minutes before to remind

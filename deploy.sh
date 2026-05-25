@@ -2,83 +2,146 @@
 # =============================================================================
 # deploy.sh — Deploy AI Day Planner to SAP BTP Cloud Foundry
 #
-# Uses PostgreSQL on SAP BTP (bound via CF service binding).
-# DATABASE_URL is derived from the CF service binding credentials.
-# Migrations run inside CF as a task (the DB is not reachable from local).
-#
 # Usage:
-#   chmod +x deploy.sh
-#   ./deploy.sh
+#   ./deploy.sh <env>          # env = dev | qual | prod
+#   ./deploy.sh dev            # Deploy to development space
+#   ./deploy.sh qual           # Deploy to qualification space
+#   ./deploy.sh prod           # Deploy to production space
+#
+# Environment routing is read from cf-environments.conf (non-sensitive).
+# Secrets are read from .env.<env>.local, falling back to .env.local.
+#
+# Required secret variables (in .env.<env>.local or .env.local):
+#   CF_APP_URL           — Full HTTPS URL of this CF app
+#   CF_DB_SERVICE_NAME   — CF PostgreSQL service instance name
+#   NEXTAUTH_SECRET      — Random secret (openssl rand -base64 32)
+#   NEXTAUTH_URL         — Same as CF_APP_URL
+#   GOOGLE_CLIENT_ID     — Google OAuth client ID
+#   GOOGLE_CLIENT_SECRET — Google OAuth client secret
+#   ENCRYPTION_KEY       — Optional: encryption key for AI settings
 # =============================================================================
 
 set -euo pipefail
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[deploy]${NC} $*"; }
-warn() { echo -e "${YELLOW}[deploy]${NC} $*"; }
-die()  { echo -e "${RED}[deploy] ERROR:${NC} $*" >&2; exit 1; }
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
+log()    { echo -e "${GREEN}[deploy]${NC} $*"; }
+info()   { echo -e "${CYAN}[deploy]${NC} $*"; }
+warn()   { echo -e "${YELLOW}[deploy]${NC} $*"; }
+die()    { echo -e "${RED}[deploy] ERROR:${NC} $*" >&2; exit 1; }
+banner() { echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; echo -e "${CYAN}  $*${NC}"; echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"; }
+
+# ── 0. Parse environment argument ─────────────────────────────────────────────
+ENV="${1:-}"
+if [[ -z "$ENV" ]]; then
+  echo -e "${RED}Usage: ./deploy.sh <env>${NC}"
+  echo -e "  Environments: ${YELLOW}dev${NC} | ${YELLOW}qual${NC} | ${YELLOW}prod${NC}"
+  echo ""
+  echo -e "  Example: ${GREEN}./deploy.sh dev${NC}"
+  exit 1
+fi
+
+case "$ENV" in
+  dev|qual|prod) ;;
+  *) die "Unknown environment '$ENV'. Must be one of: dev, qual, prod" ;;
+esac
+
+ENV_UPPER=$(echo "$ENV" | tr '[:lower:]' '[:upper:]')
+banner "Deploying AI Day Planner → ${ENV_UPPER}"
 
 # ── 1. Require CF CLI ─────────────────────────────────────────────────────────
 command -v cf >/dev/null 2>&1 || die "CF CLI not found — https://github.com/cloudfoundry/cli"
 log "CF CLI: $(cf version | head -1)"
 
-# ── 2. Load .env.local ────────────────────────────────────────────────────────
-ENV_FILE=".env.local"
-[ -f "$ENV_FILE" ] || die "$ENV_FILE not found. Copy .env.example → .env.local and fill in values."
+# ── 2. Load cf-environments.conf ─────────────────────────────────────────────
+CONF_FILE="cf-environments.conf"
+[ -f "$CONF_FILE" ] || die "$CONF_FILE not found. Run from the project root."
+
+set -a
+# shellcheck disable=SC1090
+source "$CONF_FILE"
+set +a
+
+# Resolve env-specific CF variables using indirect reference
+CF_API_VAR="${ENV_UPPER}_CF_API";    CF_API="${!CF_API_VAR:-}"
+CF_ORG_VAR="${ENV_UPPER}_CF_ORG";    CF_ORG="${!CF_ORG_VAR:-}"
+CF_SPACE_VAR="${ENV_UPPER}_CF_SPACE"; CF_SPACE="${!CF_SPACE_VAR:-}"
+MTAEXT_VAR="${ENV_UPPER}_MTAEXT";    MTAEXT="${!MTAEXT_VAR:-}"
+CF_SSO_URL_VAR="${ENV_UPPER}_CF_SSO_URL"; CF_SSO_URL="${!CF_SSO_URL_VAR:-}"
+
+[ -n "$CF_API"   ] || die "$CF_API_VAR   is not set in $CONF_FILE"
+[ -n "$CF_ORG"   ] || die "$CF_ORG_VAR   is not set in $CONF_FILE"
+[ -n "$CF_SPACE" ] || die "$CF_SPACE_VAR is not set in $CONF_FILE"
+
+info "CF API   : $CF_API"
+info "CF Org   : $CF_ORG"
+info "CF Space : $CF_SPACE"
+[ -n "$MTAEXT" ] && info "MTA ext  : $MTAEXT"
+
+# ── 3. Load secrets (.env.<env>.local → .env.local fallback) ─────────────────
+ENV_FILE=".env.${ENV}.local"
+if [ -f "$ENV_FILE" ]; then
+  log "Loading secrets from $ENV_FILE"
+else
+  ENV_FILE=".env.local"
+  warn "No .env.${ENV}.local found — falling back to $ENV_FILE"
+fi
+[ -f "$ENV_FILE" ] || die "$ENV_FILE not found. Create it with your secrets."
 
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
 
-# ── 3. Validate required variables ───────────────────────────────────────────
-for var in CF_API CF_ORG CF_SPACE CF_APP_URL CF_DB_SERVICE_NAME \
+# ── 4. Validate required secret variables ────────────────────────────────────
+for var in CF_APP_URL CF_DB_SERVICE_NAME \
            NEXTAUTH_SECRET NEXTAUTH_URL \
            GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
   [ -n "${!var:-}" ] || die "$var is not set in $ENV_FILE"
 done
 
-log "Target: $CF_API  |  Org: $CF_ORG  |  Space: $CF_SPACE"
+log "App URL  : $CF_APP_URL"
+log "DB svc   : $CF_DB_SERVICE_NAME"
 
-# ── 4. Check for a valid CF session, login only if needed ─────────────────────
+# ── 5. Authenticate with CF ───────────────────────────────────────────────────
+banner "CF Authentication"
+
+cf api "$CF_API" --skip-ssl-validation 2>/dev/null || cf api "$CF_API"
+
 if cf target -o "$CF_ORG" -s "$CF_SPACE" > /dev/null 2>&1; then
-  log "Already authenticated. Using existing session."
+  log "Already authenticated — targeting Org=$CF_ORG | Space=$CF_SPACE"
 else
-  cf api "$CF_API" --skip-ssl-validation 2>/dev/null || cf api "$CF_API"
   warn "No valid CF session found. Starting SSO login..."
-  echo ""
+  [ -n "$CF_SSO_URL" ] && info "SSO URL: $CF_SSO_URL"
   cf login --sso -a "$CF_API" -o "$CF_ORG" -s "$CF_SPACE"
 fi
 
-# ── 5. Ensure PostgreSQL service exists ───────────────────────────────────────
+# ── 6. Ensure PostgreSQL service exists ───────────────────────────────────────
+banner "Provisioning PostgreSQL"
+
 if cf service "$CF_DB_SERVICE_NAME" > /dev/null 2>&1; then
   log "PostgreSQL service '$CF_DB_SERVICE_NAME' already exists."
 else
   log "Creating PostgreSQL service '$CF_DB_SERVICE_NAME' (plan: development)..."
   cf create-service postgresql-db development "$CF_DB_SERVICE_NAME"
-  log "Waiting for service to be ready..."
+  log "Waiting for service to be ready (up to 5 min)..."
   for i in $(seq 1 30); do
     STATUS=$(cf service "$CF_DB_SERVICE_NAME" | grep -i "status:" | awk '{print $2}' || true)
-    [ "$STATUS" = "create" ] && sleep 10 || break
+    if [ "$STATUS" != "create" ]; then log "Service ready."; break; fi
+    echo "  ... waiting (${i}/30)"; sleep 10
   done
 fi
 
-# ── 6. Extract DATABASE_URL from CF service key ───────────────────────────────
-# The RDS instance is inside the CF private network — not reachable from local.
-# We still extract the URL here so we can pass it as an env var to the app.
-# Migrations will run as a CF task (step 12) where the DB is reachable.
+# ── 7. Extract DATABASE_URL from CF service key ───────────────────────────────
+log "Extracting DATABASE_URL from service key..."
 SERVICE_KEY="${CF_DB_SERVICE_NAME}-deploy-key"
 cf create-service-key "$CF_DB_SERVICE_NAME" "$SERVICE_KEY" 2>/dev/null || true
-# Skip the CF CLI header line(s) to get pure JSON
 DB_CREDS=$(cf service-key "$CF_DB_SERVICE_NAME" "$SERVICE_KEY" | tail -n +3)
 
 DATABASE_URL=$(echo "$DB_CREDS" | node -e "
 let d='';
 process.stdin.on('data',c=>d+=c).on('end',()=>{
   const j=JSON.parse(d);
-  // SAP BTP wraps fields under 'credentials'; some services return flat JSON
   const cr=j.credentials||j;
-  // Use a ready-made uri/url if provided
   if(cr.uri)  { console.log(cr.uri); return; }
   if(cr.url)  { console.log(cr.url); return; }
   const host=cr.hostname||cr.host;
@@ -90,98 +153,82 @@ process.stdin.on('data',c=>d+=c).on('end',()=>{
 });
 ")
 export DATABASE_URL
-log "Database URL derived from service binding."
+log "DATABASE_URL derived from service binding."
 
-# ── 7. Build ──────────────────────────────────────────────────────────────────
+# ── 8. Build ──────────────────────────────────────────────────────────────────
+banner "Building"
+
 log "Installing dependencies..."
 npm ci --prefer-offline 2>/dev/null || npm ci
 
 log "Generating Prisma client..."
-npx prisma generate
+./node_modules/.bin/prisma generate
 
 log "Building Next.js (standalone)..."
 npm run build
 
-[ -d ".next/standalone" ] || die ".next/standalone not found. Check next.config.ts has output: 'standalone'"
+[ -d ".next/standalone" ] || die ".next/standalone not found. Ensure next.config.ts has output: 'standalone'"
 
 log "Copying static assets into standalone..."
 cp -r public .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
 
-# Copy migration runner (standalone JS script — no Prisma CLI needed)
 cp migrate-runner.js .next/standalone/migrate-runner.js
 
-# Copy Prisma client + CLI into standalone (CLI is needed for the migrate task)
 log "Copying Prisma into standalone..."
 cp -r node_modules/.prisma     .next/standalone/node_modules/.prisma     2>/dev/null || true
 cp -r node_modules/@prisma     .next/standalone/node_modules/@prisma     2>/dev/null || true
 cp -r node_modules/prisma      .next/standalone/node_modules/prisma      2>/dev/null || true
 mkdir -p .next/standalone/prisma
-cp -r prisma/migrations        .next/standalone/prisma/migrations         2>/dev/null || true
-cp    prisma/schema.prisma     .next/standalone/prisma/schema.prisma      2>/dev/null || true
-cp    prisma.config.ts         .next/standalone/prisma.config.ts          2>/dev/null || true
+cp -r prisma/migrations        .next/standalone/prisma/migrations        2>/dev/null || true
+cp    prisma/schema.prisma     .next/standalone/prisma/schema.prisma     2>/dev/null || true
+cp    prisma.config.ts         .next/standalone/prisma.config.ts         2>/dev/null || true
 
-# Copy pg driver and adapter (required for Prisma 7 WASM client engine)
 log "Copying pg driver into standalone..."
-cp -r node_modules/pg          .next/standalone/node_modules/pg          2>/dev/null || true
-cp -r node_modules/pg-pool     .next/standalone/node_modules/pg-pool     2>/dev/null || true
-cp -r node_modules/pg-protocol .next/standalone/node_modules/pg-protocol 2>/dev/null || true
-cp -r node_modules/pg-types    .next/standalone/node_modules/pg-types    2>/dev/null || true
-cp -r node_modules/pgpass      .next/standalone/node_modules/pgpass      2>/dev/null || true
+for pkg in pg pg-pool pg-protocol pg-types pgpass; do
+  cp -r "node_modules/$pkg" ".next/standalone/node_modules/$pkg" 2>/dev/null || true
+done
 
-# Copy file-extraction packages (pdf-parse, officeparser) — not bundled by Turbopack
 log "Copying pdf-parse and officeparser into standalone..."
-cp -r node_modules/pdf-parse   .next/standalone/node_modules/pdf-parse   2>/dev/null || true
+cp -r node_modules/pdf-parse    .next/standalone/node_modules/pdf-parse    2>/dev/null || true
 cp -r node_modules/officeparser .next/standalone/node_modules/officeparser 2>/dev/null || true
 
-# Turbopack appends a content-hash to package names in the bundle (e.g.
-# @prisma/adapter-pg-<hash>, pdf-parse-<hash>). Scan the built chunks and
-# create alias directories in standalone/node_modules so Node can resolve them.
 log "Creating Turbopack hash aliases in standalone node_modules..."
 node -e "
 const fs   = require('fs');
 const path = require('path');
 const chunksDir = '.next/server/chunks';
 const modDir    = '.next/standalone/node_modules';
-
 const seen = new Set();
 for (const f of fs.readdirSync(chunksDir)) {
   if (!f.endsWith('.js')) continue;
   const src = fs.readFileSync(path.join(chunksDir, f), 'utf8');
-  // Match both scoped (@scope/pkg-hash) and unscoped (pkg-hash) package names
   const re = /[\"'](@[^/\"']+\/[^\"']+|[a-z][a-z0-9_-]+)-([0-9a-f]{16})[\"']/g;
   let m;
   while ((m = re.exec(src)) !== null) seen.add(m[0].slice(1,-1));
 }
-
 for (const hashed of seen) {
-  // Strip the trailing -<hex> to get the real package name
-  const real = hashed.replace(/-[0-9a-f]{16,}$/, '');
-
+  const real = hashed.replace(/-[0-9a-f]{16,}\$/, '');
   let realDir, dest;
   if (real.startsWith('@')) {
-    // Scoped: @prisma/adapter-pg -> @prisma/adapter-pg-<hash>
     const hashedScope = hashed.split('/')[0];
     const hashedPkg   = hashed.split('/').slice(1).join('/');
     const [scope, pkg] = real.split('/');
     realDir = path.join(modDir, scope, pkg);
     dest    = path.join(modDir, hashedScope, hashedPkg);
   } else {
-    // Unscoped: pdf-parse -> pdf-parse-<hash>
     realDir = path.join(modDir, real);
     dest    = path.join(modDir, hashed);
   }
-
   if (!fs.existsSync(realDir)) { console.log('  skip (no source):', real); continue; }
   if (fs.existsSync(dest))     { console.log('  already exists:', hashed); continue; }
-
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.cpSync(realDir, dest, { recursive: true });
   console.log('  aliased:', real, '->', hashed);
 }
 "
 
-log "Removing native modules not needed at runtime (sharp, @img, SWC)..."
+log "Removing native modules not needed at runtime..."
 rm -rf .next/standalone/node_modules/sharp \
        .next/standalone/node_modules/@img \
        .next/standalone/node_modules/@next/swc-* \
@@ -189,7 +236,6 @@ rm -rf .next/standalone/node_modules/sharp \
 
 node -e "
   const fs = require('fs');
-  // Read versions from local node_modules for all packages needed at runtime
   const v = (pkg) => {
     try { return JSON.parse(fs.readFileSync('./node_modules/' + pkg + '/package.json', 'utf8')).version; }
     catch(e) { return '*'; }
@@ -200,14 +246,10 @@ node -e "
     private: true,
     engines: { node: '20.x' },
     dependencies: {
-      // Next.js server
-      'next': v('next'),
-      // PostgreSQL driver (for migrate-runner.js and @prisma/adapter-pg)
-      'pg': v('pg'),
-      // Prisma runtime packages (prevent buildpack from pruning them)
+      'next':                v('next'),
+      'pg':                  v('pg'),
       '@prisma/client':      v('@prisma/client'),
       '@prisma/adapter-pg':  v('@prisma/adapter-pg'),
-      // File extraction packages (loaded at runtime, not bundled by Turbopack)
       'pdf-parse':           v('pdf-parse'),
       'officeparser':        v('officeparser'),
     },
@@ -216,9 +258,8 @@ node -e "
   fs.writeFileSync('./.next/standalone/package.json', JSON.stringify(stub, null, 2) + '\n');
 "
 rm -f .next/standalone/package-lock.json
-log "Wrote minimal standalone/package.json"
 
-cat > .next/standalone/.npmrc <<'EOF'
+cat > .next/standalone/.npmrc   <<'EOF'
 ignore-scripts=true
 EOF
 
@@ -229,9 +270,13 @@ node_modules/sharp
 node_modules/@img/
 EOF
 
-# ── 8. Push (no-start) ───────────────────────────────────────────────────────
+log "Build complete."
+
+# ── 9. Push (no-start) ────────────────────────────────────────────────────────
+banner "Pushing to CF [$ENV_UPPER]"
+
 APP_NAME="ai-day-planner"
-log "Pushing $APP_NAME to CF (no-start)..."
+log "Pushing $APP_NAME (no-start)..."
 cf push "$APP_NAME" \
   --no-start \
   -p .next/standalone \
@@ -242,59 +287,62 @@ cf push "$APP_NAME" \
   --endpoint /api/health \
   -c "node server.js"
 
-# ── 9. Bind PostgreSQL service ────────────────────────────────────────────────
-log "Binding PostgreSQL service..."
+# ── 10. Bind PostgreSQL service ───────────────────────────────────────────────
+log "Binding PostgreSQL service '$CF_DB_SERVICE_NAME'..."
 cf bind-service "$APP_NAME" "$CF_DB_SERVICE_NAME" 2>/dev/null || log "Service already bound."
 
-# ── 10. Set environment variables ─────────────────────────────────────────────
+# ── 11. Set environment variables ─────────────────────────────────────────────
 log "Setting environment variables..."
-cf set-env "$APP_NAME" NODE_ENV             production
+NODE_ENV_VALUE="$([ "$ENV" = "dev" ] && echo "development" || echo "production")"
+cf set-env "$APP_NAME" NODE_ENV             "$NODE_ENV_VALUE"
 cf set-env "$APP_NAME" DATABASE_URL         "$DATABASE_URL"
 cf set-env "$APP_NAME" NEXTAUTH_SECRET      "$NEXTAUTH_SECRET"
 cf set-env "$APP_NAME" NEXTAUTH_URL         "$CF_APP_URL"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_ID     "$GOOGLE_CLIENT_ID"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
-cf set-env "$APP_NAME" ENCRYPTION_KEY       "$ENCRYPTION_KEY"
+[ -n "${ENCRYPTION_KEY:-}" ] && cf set-env "$APP_NAME" ENCRYPTION_KEY "$ENCRYPTION_KEY"
 
-# ── 11. Start the app ────────────────────────────────────────────────────────
+# ── 12. Start the app ─────────────────────────────────────────────────────────
 log "Starting $APP_NAME..."
 cf start "$APP_NAME"
 
-# ── 12. Run Prisma migrations as a CF task ────────────────────────────────────
-# Run AFTER start so the new droplet (with migrate-runner.js) is active.
-# The DB is inside CF's private network — only reachable from within CF.
-log "Running Prisma migrations as CF task..."
+# ── 13. Run Prisma migrations as a CF task ─────────────────────────────────────
+banner "Running DB Migrations"
+
 TASK_NAME="prisma-migrate-$(date +%s)"
 cf run-task "$APP_NAME" \
   --command "node migrate-runner.js" \
   --name "$TASK_NAME" \
   -m 256M
 
-log "Waiting for migration task to complete..."
+log "Waiting for migration task (up to 5 min)..."
 for i in $(seq 1 60); do
   TASK_STATE=$(cf tasks "$APP_NAME" | grep "$TASK_NAME" | awk '{print $3}' || true)
   if [ "$TASK_STATE" = "SUCCEEDED" ]; then
     log "Migrations complete."
     break
   elif [ "$TASK_STATE" = "FAILED" ]; then
-    warn "Migration task failed. Checking task logs..."
+    warn "Migration task failed. Recent logs:"
     cf logs "$APP_NAME" --recent 2>&1 | grep -A5 "$TASK_NAME" | tail -30
     die "Migrations failed — fix the issue and redeploy."
   fi
-  log "Migration task state: ${TASK_STATE:-pending}... (${i}/60)"
+  echo "  ... task state: ${TASK_STATE:-pending} (${i}/60)"
   sleep 5
 done
 
 # ── Done ──────────────────────────────────────────────────────────────────────
+banner "Deployment Complete [$ENV_UPPER]"
+
+echo -e "  Environment : ${CYAN}${ENV_UPPER}${NC}"
+echo -e "  App URL     : ${GREEN}$CF_APP_URL${NC}"
+echo -e "  CF Org      : $CF_ORG"
+echo -e "  CF Space    : $CF_SPACE"
 echo ""
-log "Deployment complete!"
-echo ""
-echo -e "  App URL : ${GREEN}$CF_APP_URL${NC}"
-echo ""
-warn "Make sure this redirect URI is in your Google Cloud Console credentials:"
+warn "Ensure this Google OAuth redirect URI is registered:"
 echo -e "  ${YELLOW}$CF_APP_URL/api/auth/callback/google${NC}"
 echo ""
 log "Useful commands:"
-echo "  cf logs $APP_NAME --recent"
-echo "  cf tasks $APP_NAME"
-echo "  cf app   $APP_NAME"
+echo "  cf logs   $APP_NAME --recent"
+echo "  cf tasks  $APP_NAME"
+echo "  cf app    $APP_NAME"
+echo "  cf events $APP_NAME"

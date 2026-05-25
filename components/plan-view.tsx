@@ -949,10 +949,12 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
 
       <style jsx>{`
         .plan-view {
-          min-height: 100vh;
+          height: 100dvh;
           background: var(--background);
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+          position: relative;
         }
 
         /* Sticky top block */
@@ -1493,7 +1495,11 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         .timeline-container {
           flex: 1;
           overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
           padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+          min-height: 0;
         }
 
         /* Floating Action Buttons */

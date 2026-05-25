@@ -22,13 +22,8 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Always allow: public share link (/?share=xxx)
-  if (nextUrl.pathname === '/' && nextUrl.searchParams.has('share')) {
-    return NextResponse.next();
-  }
-
-  // Always allow: public checklist share link (/?cshare=xxx)
-  if (nextUrl.pathname === '/' && nextUrl.searchParams.has('cshare')) {
+  // Landing page and share links — always public
+  if (nextUrl.pathname === '/') {
     return NextResponse.next();
   }
 
@@ -42,9 +37,9 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Protect all other routes
+  // Protect all other routes — send to landing page (not /sign-in)
   if (!isLoggedIn) {
-    return NextResponse.redirect(new URL('/sign-in', base));
+    return NextResponse.redirect(new URL('/', base));
   }
 
   return NextResponse.next();

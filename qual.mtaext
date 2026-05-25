@@ -1,0 +1,25 @@
+_schema-version: "3.3.0"
+ID: ai-day-planner
+extends: ai-day-planner
+
+# ==============================================================================
+# Qualification / Staging MTA Extension Descriptor
+# Overrides mta.yml properties for the QUAL environment.
+# ==============================================================================
+
+modules:
+  - name: ai-day-planner
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      instances: 1
+    properties:
+      NODE_ENV: production
+
+resources:
+  - name: ai-day-planner-db
+    parameters:
+      service: postgresql-db
+      service-plan: development
+      config:
+        engine: postgres

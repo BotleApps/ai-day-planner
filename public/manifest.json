@@ -1,7 +1,7 @@
 {
-  "name": "AI Day Planner",
-  "short_name": "Day Planner",
-  "description": "Organize your day with AI-powered planning",
+  "name": "SortedPlan",
+  "short_name": "SortedPlan",
+  "description": "AI-powered travel planning — beautiful itineraries, smart checklists, share with your crew.",
   "id": "/",
   "start_url": "/",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "background_color": "#f8fafc",
   "theme_color": "#6366f1",
   "orientation": "portrait-primary",
-  "categories": ["productivity", "lifestyle"],
+  "categories": ["travel", "productivity", "lifestyle"],
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
@@ -76,7 +76,7 @@
     {
       "name": "New Plan",
       "short_name": "New Plan",
-      "description": "Create a new day plan",
+      "description": "Create a new travel plan",
       "url": "/?action=new",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
     }
