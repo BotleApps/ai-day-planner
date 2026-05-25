@@ -147,15 +147,17 @@ export function ActivityModal({
     setImageError('');
     setImageUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (data.url) {
-        setFormData(prev => ({ ...prev, imageUrl: data.url }));
-      } else {
-        setImageError(data.error || 'Upload failed');
+      if (file.size > 2 * 1024 * 1024) {
+        setImageError('Image too large (max 2MB)');
+        return;
       }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+      setFormData(prev => ({ ...prev, imageUrl: dataUrl }));
     } catch {
       setImageError('Upload failed');
     } finally {
@@ -396,7 +398,7 @@ export function ActivityModal({
                   <>
                     <Upload size={20} />
                     <span>Tap to upload a photo</span>
-                    <span className="upload-hint">JPG, PNG, WebP · Max 5MB</span>
+                    <span className="upload-hint">JPG, PNG, WebP · Max 2MB</span>
                   </>
                 )}
                 <input

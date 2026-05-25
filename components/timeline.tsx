@@ -800,10 +800,10 @@ function ActivityDetailPopup({
           border-radius: 20px 20px 0 0;
           z-index: 201;
           animation: slideUp 0.25s ease;
-          max-height: 85vh;
-          overflow-y: auto;
-          /* Ensure content above the FABs (56px height + 24px bottom + safe area) */
-          padding-bottom: env(safe-area-inset-bottom, 0px);
+          max-height: 88svh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
 
         @keyframes slideUp {
@@ -818,6 +818,7 @@ function ActivityDetailPopup({
             left: 50%;
             transform: translate(-50%, -50%);
             max-width: 400px;
+            max-height: 88svh;
             border-radius: 20px;
             animation: popIn 0.2s ease;
           }
@@ -834,6 +835,7 @@ function ActivityDetailPopup({
           gap: 12px;
           padding: 20px;
           border-bottom: 3px solid;
+          flex-shrink: 0;
         }
 
         .popup-icon {
@@ -871,6 +873,10 @@ function ActivityDetailPopup({
 
         .popup-body {
           padding: 20px;
+          flex: 1;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
         }
 
         .popup-image {
@@ -987,8 +993,9 @@ function ActivityDetailPopup({
 
         .popup-actions {
           padding: 16px 20px;
-          padding-bottom: calc(16px + 88px + env(safe-area-inset-bottom, 0px));
+          padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
           border-top: 1px solid var(--border);
+          flex-shrink: 0;
         }
 
         .status-actions {

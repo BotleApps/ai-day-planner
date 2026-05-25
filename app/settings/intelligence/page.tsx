@@ -15,6 +15,8 @@ import {
   Trash2,
   ExternalLink,
   Key,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import {
   AIProvider,
@@ -22,6 +24,7 @@ import {
   AIModelOption,
   loadAISettings,
   saveAISettings,
+  isAIConfigured,
   loadAISettingsFromServer,
   saveAISettingsToServer,
   DEFAULT_AI_SETTINGS,
@@ -29,6 +32,7 @@ import {
 import type { GeminiModel } from '@/lib/gemini';
 
 type Status = 'idle' | 'testing' | 'success' | 'error';
+type View = 'select' | 'configure';
 
 const SAP_BACKEND_LABEL: Record<string, string> = {
   openai: 'Azure OpenAI',
@@ -45,7 +49,8 @@ const SAP_BACKEND_COLOR: Record<string, string> = {
 export default function IntelligencePage() {
   const router = useRouter();
   const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
-  const [activeTab, setActiveTab] = useState<AIProvider>('sap');
+  const [activeTab, setActiveTab] = useState<AIProvider>('gemini');
+  const [view, setView] = useState<View>('select');
 
   // SAP state
   const [sapModels, setSapModels] = useState<AIModelOption[]>([]);
@@ -64,12 +69,18 @@ export default function IntelligencePage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setSettings(loadAISettings());
+    const local = loadAISettings();
+    setSettings(local);
+    if (isAIConfigured(local)) {
+      setActiveTab(local.provider || 'gemini');
+      setView('configure');
+    }
     loadAISettingsFromServer().then(serverSettings => {
       if (serverSettings.clientId || serverSettings.deploymentId || serverSettings.geminiApiKey) {
         setSettings(serverSettings);
         saveAISettings(serverSettings);
-        setActiveTab(serverSettings.provider || 'sap');
+        setActiveTab(serverSettings.provider || 'gemini');
+        setView('configure');
       }
     });
   }, []);
@@ -82,6 +93,12 @@ export default function IntelligencePage() {
   const handleTabChange = (tab: AIProvider) => {
     setActiveTab(tab);
     update({ provider: tab });
+  };
+
+  const selectProvider = (provider: AIProvider) => {
+    setActiveTab(provider);
+    update({ provider });
+    setView('configure');
   };
 
   const handleSave = async () => {
@@ -101,6 +118,7 @@ export default function IntelligencePage() {
     setGeminiModels([]);
     setSapStatus('idle');
     setGeminiStatus('idle');
+    setView('select');
     router.push('/settings');
   };
 
@@ -202,38 +220,91 @@ export default function IntelligencePage() {
     <div className="page">
       {/* Header */}
       <header className="header">
-        <button className="back-btn" onClick={() => router.push('/settings')}>
+        <button
+          className="back-btn"
+          onClick={() => view === 'configure' && !isAIConfigured(settings) ? setView('select') : router.push('/settings')}
+        >
           <ArrowLeft size={18} />
-          Settings
+          {view === 'configure' && !isAIConfigured(settings) ? 'Back' : 'Settings'}
         </button>
         <h1>AI Intelligence</h1>
-        <button
-          className={`save-btn ${saved ? 'saving' : ''}`}
-          onClick={handleSave}
-          disabled={saved}
-        >
-          {saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
-          {saved ? 'Saved' : 'Save'}
-        </button>
+        {view === 'configure' ? (
+          <button
+            className={`save-btn ${saved ? 'saving' : ''}`}
+            onClick={handleSave}
+            disabled={saved}
+          >
+            {saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
+            {saved ? 'Saved' : 'Save'}
+          </button>
+        ) : (
+          <div style={{ width: 72 }} />
+        )}
       </header>
 
+      {/* ── Provider selection screen ─────────────────────────── */}
+      {view === 'select' && (
+        <div className="scroll">
+          <div className="select-intro">
+            <div className="select-icon">
+              <Sparkles size={28} />
+            </div>
+            <h2 className="select-title">Choose AI Provider</h2>
+            <p className="select-sub">Select the AI service you want to connect to power your planning assistant.</p>
+          </div>
+
+          <div className="provider-cards">
+            {/* Google Gemini — first / recommended */}
+            <button className="provider-card provider-card--gemini" onClick={() => selectProvider('gemini')}>
+              <div className="pcard-top">
+                <div className="pcard-icon pcard-icon--gemini">
+                  <Bot size={24} />
+                </div>
+                <span className="pcard-badge">Recommended</span>
+              </div>
+              <div className="pcard-body">
+                <span className="pcard-name">Google Gemini</span>
+                <span className="pcard-desc">Gemini 2.5 Pro, Flash, and more — free API key from Google AI Studio</span>
+              </div>
+              <ChevronRight size={18} className="pcard-arrow" />
+            </button>
+
+            {/* SAP AI Core */}
+            <button className="provider-card provider-card--sap" onClick={() => selectProvider('sap')}>
+              <div className="pcard-top">
+                <div className="pcard-icon pcard-icon--sap">
+                  <Bot size={24} />
+                </div>
+              </div>
+              <div className="pcard-body">
+                <span className="pcard-name">SAP AI Core</span>
+                <span className="pcard-desc">Generative AI Hub — GPT, Claude, Gemini via SAP BTP service key</span>
+              </div>
+              <ChevronRight size={18} className="pcard-arrow" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Configure screen ──────────────────────────────────── */}
+      {view === 'configure' && (
       <div className="scroll">
 
         {/* Provider tabs */}
         <div className="tab-row">
-          <button
-            className={`tab-btn ${activeTab === 'sap' ? 'active' : ''}`}
-            onClick={() => handleTabChange('sap')}
-          >
-            <span className="tab-dot sap-dot" />
-            SAP AI Core
-          </button>
           <button
             className={`tab-btn ${activeTab === 'gemini' ? 'active' : ''}`}
             onClick={() => handleTabChange('gemini')}
           >
             <span className="tab-dot gemini-dot" />
             Google Gemini
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'sap' ? 'active' : ''}`}
+            onClick={() => handleTabChange('sap')}
+          >
+            <span className="tab-dot sap-dot" />
+            SAP AI Core
           </button>
         </div>
 
@@ -535,6 +606,7 @@ export default function IntelligencePage() {
           Credentials are encrypted and stored securely on the server, synced across all your devices.
         </p>
       </div>
+      )}
 
       <style jsx>{`
         .page {
@@ -929,6 +1001,129 @@ export default function IntelligencePage() {
 
         @media (max-width: 480px) {
           .scroll { padding: 20px 16px 48px; }
+        }
+
+        /* ── Provider selection screen ─────────────── */
+        .select-intro {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          padding: 32px 0 36px;
+        }
+        .select-icon {
+          width: 64px;
+          height: 64px;
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--primary) 14%, var(--card));
+          color: var(--primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 20px;
+        }
+        .select-title {
+          font-size: 22px;
+          font-weight: 800;
+          color: var(--foreground);
+          margin: 0 0 10px;
+          letter-spacing: -0.02em;
+        }
+        .select-sub {
+          font-size: 14px;
+          color: var(--muted-foreground);
+          max-width: 340px;
+          line-height: 1.6;
+          margin: 0;
+        }
+        .provider-cards {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .provider-card {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 20px;
+          background: var(--card);
+          border: 1.5px solid var(--border);
+          border-radius: 18px;
+          cursor: pointer;
+          text-align: left;
+          transition: all 0.18s;
+          width: 100%;
+        }
+        .provider-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 24px rgba(0,0,0,0.1);
+        }
+        .provider-card--gemini {
+          border-color: color-mix(in srgb, #4285f4 30%, transparent);
+          background: color-mix(in srgb, #4285f4 4%, var(--card));
+        }
+        .provider-card--gemini:hover {
+          border-color: #4285f4;
+          box-shadow: 0 6px 24px color-mix(in srgb, #4285f4 20%, transparent);
+        }
+        .provider-card--sap:hover {
+          border-color: var(--primary);
+          box-shadow: 0 6px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+        }
+        .pcard-top {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+        }
+        .pcard-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .pcard-icon--gemini {
+          background: linear-gradient(135deg, #e8f0fe, #d2e3fc);
+          color: #4285f4;
+        }
+        .pcard-icon--sap {
+          background: linear-gradient(135deg,
+            color-mix(in srgb, var(--primary) 18%, var(--card)),
+            color-mix(in srgb, var(--primary) 8%, var(--card))
+          );
+          color: var(--primary);
+        }
+        .pcard-badge {
+          padding: 3px 9px;
+          background: #4285f4;
+          color: white;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .pcard-body {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+        }
+        .pcard-name {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--foreground);
+        }
+        .pcard-desc {
+          font-size: 13px;
+          color: var(--muted-foreground);
+          line-height: 1.4;
+        }
+        .pcard-arrow {
+          color: var(--muted-foreground);
+          flex-shrink: 0;
         }
       `}</style>
     </div>
