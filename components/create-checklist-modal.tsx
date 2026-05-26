@@ -89,7 +89,21 @@ export default function CreateChecklistModal({
     if (initialTemplateId) {
       setMode('template');
       setSelectedTemplateId(initialTemplateId);
-      setView('templates');
+      // Fetch template items and jump straight to preview — no need to browse the list again
+      fetch(`/api/checklists/templates?id=${initialTemplateId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.template) {
+            setTitle(data.template.title || '');
+            if (data.template.items?.length) {
+              setPreviewItems(data.template.items.map((i: { title: string; groupName?: string }) => ({
+                title: i.title, groupName: i.groupName || '', included: true,
+              })));
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setView('preview'));
     } else if (initialMode === 'ai') { setMode('ai'); setView('ai'); }
     else if (initialMode === 'template') { setMode('template'); setView('templates'); }
     else if (initialMode === 'manual') { setMode('manual'); setView('manual'); }

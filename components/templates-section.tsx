@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   LayoutTemplate, Plus, Globe, User,
-  Trash2, Upload, CheckCircle2, MoreVertical, BookOpen,
+  Trash2, Upload, CheckCircle2, MoreVertical, BookOpen, Share2, Check,
 } from 'lucide-react';
 
 interface Template {
@@ -46,6 +47,7 @@ interface TemplatesSectionProps {
 }
 
 export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: TemplatesSectionProps) {
+  const router = useRouter();
   const [tab, setTab] = useState<'browse' | 'mine'>('browse');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +56,7 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
   const [menuId, setMenuId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     setQuery(externalQuery ?? '');
@@ -108,6 +111,21 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
   };
 
   const catStyle = (cat: string) => CAT_COLORS[cat] || CAT_COLORS.general;
+
+  const handleShare = async (tpl: Template) => {
+    const url = `${window.location.origin}/templates/${tpl.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: tpl.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopiedId(tpl.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="ts-container">
@@ -169,64 +187,65 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
               const cs = catStyle(tpl.category);
               return (
                 <div key={tpl.id} className="ts-card">
-                  {/* Card header */}
-                  <div className="ts-card-top">
-                    <span className="ts-cat-badge" style={{ background: cs.bg, color: cs.color }}>
-                      {tpl.category}
-                    </span>
-                    <div className="ts-card-actions">
-                      {tpl.isPublished && (
-                        <span className="ts-pub-badge"><Globe size={10} />Public</span>
-                      )}
-                      {tab === 'mine' && (
-                        <div className="ts-menu-wrap">
-                          <button
-                            className="ts-menu-btn"
-                            onClick={() => setMenuId(menuId === tpl.id ? null : tpl.id)}
-                          >
-                            <MoreVertical size={16} />
-                          </button>
-                          {menuId === tpl.id && (
-                            <div className="ts-menu">
-                              {!tpl.isPublished && (
+                  {/* Clickable card body — opens detail page */}
+                  <div className="ts-card-clickable" onClick={() => router.push(`/templates/${tpl.id}`)}>
+                    <div className="ts-card-top">
+                      <span className="ts-cat-badge" style={{ background: cs.bg, color: cs.color }}>
+                        {tpl.category}
+                      </span>
+                      <div className="ts-card-actions">
+                        {tpl.isPublished && (
+                          <span className="ts-pub-badge"><Globe size={10} />Public</span>
+                        )}
+                        {tab === 'mine' && (
+                          <div className="ts-menu-wrap" onClick={e => e.stopPropagation()}>
+                            <button
+                              className="ts-menu-btn"
+                              onClick={() => setMenuId(menuId === tpl.id ? null : tpl.id)}
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                            {menuId === tpl.id && (
+                              <div className="ts-menu">
+                                {!tpl.isPublished && (
+                                  <button
+                                    className="ts-menu-row"
+                                    onClick={() => handlePublish(tpl.id)}
+                                    disabled={publishing === tpl.id}
+                                  >
+                                    {publishing === tpl.id ? (
+                                      <span className="ts-spinner" />
+                                    ) : (
+                                      <Upload size={13} />
+                                    )}
+                                    Publish
+                                  </button>
+                                )}
+                                {tpl.isPublished && (
+                                  <div className="ts-menu-row published-row">
+                                    <CheckCircle2 size={13} />
+                                    Published
+                                  </div>
+                                )}
+                                <div className="ts-menu-divider" />
                                 <button
-                                  className="ts-menu-row"
-                                  onClick={() => handlePublish(tpl.id)}
-                                  disabled={publishing === tpl.id}
+                                  className="ts-menu-row ts-menu-danger"
+                                  onClick={() => handleDelete(tpl.id)}
+                                  disabled={deleting === tpl.id}
                                 >
-                                  {publishing === tpl.id ? (
-                                    <span className="ts-spinner" />
-                                  ) : (
-                                    <Upload size={13} />
-                                  )}
-                                  Publish
+                                  {deleting === tpl.id ? <span className="ts-spinner" /> : <Trash2 size={13} />}
+                                  Delete
                                 </button>
-                              )}
-                              {tpl.isPublished && (
-                                <div className="ts-menu-row published-row">
-                                  <CheckCircle2 size={13} />
-                                  Published
-                                </div>
-                              )}
-                              <div className="ts-menu-divider" />
-                              <button
-                                className="ts-menu-row ts-menu-danger"
-                                onClick={() => handleDelete(tpl.id)}
-                                disabled={deleting === tpl.id}
-                              >
-                                {deleting === tpl.id ? <span className="ts-spinner" /> : <Trash2 size={13} />}
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Card body */}
-                  <h4 className="ts-card-title">{tpl.title}</h4>
-                  {tpl.description && <p className="ts-card-desc">{tpl.description}</p>}
+                    <h4 className="ts-card-title">{tpl.title}</h4>
+                    {tpl.description && <p className="ts-card-desc">{tpl.description}</p>}
+                  </div>
 
                   {/* Card footer */}
                   <div className="ts-card-footer">
@@ -236,12 +255,23 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
                         <span className="ts-author">by {tpl.authorName}</span>
                       )}
                     </div>
-                    <button
-                      className="ts-use-btn"
-                      onClick={() => onUseTemplate(tpl.id, tpl.title)}
-                    >
-                      Use
-                    </button>
+                    <div className="ts-footer-actions" onClick={e => e.stopPropagation()}>
+                      {tpl.isPublished && (
+                        <button
+                          className="ts-share-btn"
+                          title="Copy link"
+                          onClick={() => handleShare(tpl)}
+                        >
+                          {copiedId === tpl.id ? <Check size={13} /> : <Share2 size={13} />}
+                        </button>
+                      )}
+                      <button
+                        className="ts-use-btn"
+                        onClick={() => onUseTemplate(tpl.id, tpl.title)}
+                      >
+                        Use
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -373,13 +403,23 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
           background: var(--card);
           border: 1px solid var(--border);
           border-radius: 14px;
-          padding: 14px 16px;
+          overflow: hidden;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 0;
           transition: border-color 0.15s;
         }
         .ts-card:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+
+        .ts-card-clickable {
+          padding: 14px 16px 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .ts-card-clickable:hover { background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
 
         .ts-card-top {
           display: flex;
@@ -437,7 +477,8 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-top: 4px;
+          padding: 10px 16px 14px;
+          border-top: 1px solid var(--border);
         }
 
         .ts-card-meta {
@@ -472,6 +513,18 @@ export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: 
           -webkit-tap-highlight-color: transparent;
         }
         .ts-use-btn:hover { opacity: 0.88; }
+
+        .ts-footer-actions { display: flex; align-items: center; gap: 6px; }
+
+        .ts-share-btn {
+          width: 30px; height: 30px;
+          display: flex; align-items: center; justify-content: center;
+          border: 1px solid var(--border); border-radius: 7px;
+          background: var(--background); color: var(--muted-foreground);
+          cursor: pointer; transition: all 0.15s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .ts-share-btn:hover { background: var(--muted); color: var(--foreground); }
 
         /* Context menu */
         .ts-menu-wrap { position: relative; }

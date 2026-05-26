@@ -1,11 +1,14 @@
-// AI Day Planner — Service Worker
-// Cache-first for static assets, network-first for API/navigation.
+// SortedPlan — Service Worker v3
+// Static assets: cache-first. Data APIs: network-first with offline fallback.
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v3';
 const STATIC_CACHE = `aip-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `aip-runtime-${CACHE_VERSION}`;
+const DATA_CACHE = `aip-data-${CACHE_VERSION}`;
 
-// Assets to pre-cache on install
+// Routes whose GET responses are cached for offline use
+const DATA_ROUTES = ['/api/plans', '/api/checklists'];
+
 const PRECACHE_URLS = [
   '/',
   '/manifest.json',
@@ -13,7 +16,7 @@ const PRECACHE_URLS = [
   '/icons/icon-512x512.png',
 ];
 
-// ── Install ─────────────────────────────────────────────────────────────────
+// ── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS))
@@ -27,8 +30,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== STATIC_CACHE && key !== RUNTIME_CACHE)
-          .map((key) => caches.delete(key))
+          .filter((k) => k !== STATIC_CACHE && k !== RUNTIME_CACHE && k !== DATA_CACHE)
+          .map((k) => caches.delete(k))
       )
     )
   );
@@ -40,51 +43,74 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET, cross-origin, and API requests (always network for those)
-  if (
-    request.method !== 'GET' ||
-    url.origin !== self.location.origin ||
-    url.pathname.startsWith('/api/')
-  ) {
+  // Only handle same-origin GET requests
+  if (request.method !== 'GET' || url.origin !== self.location.origin) {
     return;
   }
 
-  // Next.js static assets (_next/static) — cache-first
+  // Data API routes (plans, checklists) — network-first, stale fallback when offline
+  if (DATA_ROUTES.some((route) => url.pathname.startsWith(route))) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(DATA_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then(
+            (cached) =>
+              cached ||
+              new Response(
+                JSON.stringify({ plans: [], checklists: [], _offline: true }),
+                { headers: { 'Content-Type': 'application/json' } }
+              )
+          )
+        )
+    );
+    return;
+  }
+
+  // Skip remaining API routes — always network, no caching
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Next.js static chunks — cache-first
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
       caches.match(request).then(
-        (cached) => cached || fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-          return response;
-        })
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
+            return response;
+          })
       )
     );
     return;
   }
 
-  // Public static files (icons, manifest) — cache-first
-  if (
-    url.pathname.startsWith('/icons/') ||
-    url.pathname === '/manifest.json'
-  ) {
+  // Icons and manifest — cache-first
+  if (url.pathname.startsWith('/icons/') || url.pathname === '/manifest.json') {
     event.respondWith(
       caches.match(request).then(
-        (cached) => cached || fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-          return response;
-        })
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone()));
+            return response;
+          })
       )
     );
     return;
   }
 
-  // Navigation (HTML pages) — network-first with offline fallback to cached '/'
+  // Navigation (HTML) — network-first, fall back to cached '/'
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request).catch(() => caches.match('/'))
-    );
+    event.respondWith(fetch(request).catch(() => caches.match('/')));
     return;
   }
 

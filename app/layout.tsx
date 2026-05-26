@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import SessionProvider from "@/components/session-provider";
 import ServiceWorkerRegistration from "@/components/service-worker-registration";
 import { SplashScreen } from "@/components/splash-screen";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { OfflineBanner } from "@/components/offline-banner";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -65,6 +67,8 @@ export default function RootLayout({
             disableTransitionOnChange={false}
           >
             <SplashScreen />
+            <PullToRefresh />
+            <OfflineBanner />
             {children}
           </ThemeProvider>
         </SessionProvider>
