@@ -163,6 +163,7 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
 
   // Inline "add item to a specific group" — keeps state local to the group block
   const [groupAddTitle, setGroupAddTitle] = useState<Record<string, string>>({});
+  const [openAddGroup, setOpenAddGroup] = useState<string | null>(null);
   const handleAddItemToGroup = async (groupName: string) => {
     if (!checklist || !isEditable) return;
     const title = (groupAddTitle[groupName] ?? '').trim();
@@ -232,6 +233,29 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ checklistId: checklist.id, deleteGroup: { name, removeItems } }),
+    });
+  };
+
+  const handleMoveGroup = async (groupName: string, direction: 'up' | 'down') => {
+    if (!checklist || !isEditable) return;
+    const groups = groupItems(checklist.items);
+    if (!groups.some(g => g.groupName === '')) groups.unshift({ groupName: '', items: [] });
+    const order = groups.map(g => g.groupName);
+    const idx = order.indexOf(groupName);
+    const target = direction === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || target < 0 || target >= order.length) return;
+    [order[idx], order[target]] = [order[target], order[idx]];
+    const ordered = order
+      .flatMap((g) => checklist.items.filter((i) => (i.groupName || '') === (g || '')))
+      .map((item, i) => ({ ...item, order: i }));
+    setChecklist((prev) => (prev ? { ...prev, items: ordered } : null));
+    await fetch('/api/checklists/items', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        checklistId: checklist.id,
+        items: ordered.map(({ id, order }) => ({ id, order })),
+      }),
     });
   };
 
@@ -412,6 +436,16 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
     return { groups: out, hiddenCount: total - limit };
   }, [grouped, isUnauthenticatedViewer, checklist?.items]);
 
+  // Always ensure a "General" (empty groupName) group is present for editable views
+  const displayGroups = useMemo(() => {
+    if (!isEditable) return visibleSlice.groups;
+    const groups = [...visibleSlice.groups];
+    if (!groups.some(g => g.groupName === '')) {
+      groups.unshift({ groupName: '', items: [] });
+    }
+    return groups;
+  }, [visibleSlice.groups, isEditable]);
+
   // ── Render ──────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -457,10 +491,10 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
         </button>
 
         <div className="header-actions">
-          {isOwner && (
-            <button className="header-btn" onClick={openShareModal} title="Sharing">
-              <Share2 size={16} />
-              <span className="header-btn-label">Share</span>
+          {isEditable && (
+            <button className="header-btn" onClick={openEditModal} title="Edit">
+              <Edit2 size={16} />
+              <span className="header-btn-label">Edit</span>
             </button>
           )}
           {isEditable && (
@@ -474,17 +508,14 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
               </button>
               {showMoreMenu && (
                 <div className="more-menu">
-                  <button onClick={openEditModal}>
-                    <Edit2 size={14} /> Edit details
-                  </button>
-                  {isOwner && (
-                    <button onClick={openTemplateModal}>
-                      <LayoutTemplate size={14} /> Save as template
-                    </button>
-                  )}
                   {isOwner && (
                     <button onClick={openShareModal}>
                       <Share2 size={14} /> Sharing
+                    </button>
+                  )}
+                  {isOwner && (
+                    <button onClick={openTemplateModal}>
+                      <LayoutTemplate size={14} /> Save as template
                     </button>
                   )}
                   {isOwner && (
@@ -533,12 +564,6 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
             </span>
           )}
           {checklist.planId && <span className="plan-badge">Linked to plan</span>}
-          {isEditable && (
-            <button className="meta-edit-btn" onClick={openEditModal} title="Edit details">
-              <Pencil size={12} />
-              Edit
-            </button>
-          )}
         </div>
       </div>
 
@@ -559,53 +584,64 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
 
       {/* Items by group */}
       <div className="items-section">
-        {visibleSlice.groups.map(({ groupName, items }) => {
-          const isUngrouped = groupName === '';
+        {(isEditable ? displayGroups : visibleSlice.groups).map(({ groupName, items }, groupIndex) => {
+          const isGeneral = groupName === '';
+          const displayName = isGeneral ? 'General' : groupName;
+          const addTitle = groupAddTitle[groupName] ?? '';
+          const allGroups = isEditable ? displayGroups : visibleSlice.groups;
+          const isFirst = groupIndex === 0;
+          const isLast = groupIndex === allGroups.length - 1;
           return (
-            <div key={groupName || '__ungrouped'} className={`item-group ${isUngrouped ? 'ungrouped' : ''}`}>
-              {!isUngrouped && (
-                <div className="group-header">
-                  {renamingGroup === groupName ? (
-                    <input
-                      className="group-rename-input"
-                      autoFocus
-                      value={renameGroupValue}
-                      onChange={(e) => setRenameGroupValue(e.target.value)}
-                      onBlur={() => handleRenameGroup(groupName)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRenameGroup(groupName);
-                        if (e.key === 'Escape') setRenamingGroup(null);
-                      }}
-                    />
-                  ) : (
-                    <span className="group-name">{groupName}</span>
-                  )}
-                  <span className="group-count">
-                    {items.filter((i) => i.completed).length}/{items.length}
-                  </span>
-                  {isEditable && renamingGroup !== groupName && (
-                    <div className="group-actions">
+            <div key={groupName || '__general'} className="item-group">
+              <div className="group-header">
+                {renamingGroup === groupName ? (
+                  <input
+                    className="group-rename-input"
+                    autoFocus
+                    value={renameGroupValue}
+                    onChange={(e) => setRenameGroupValue(e.target.value)}
+                    onBlur={() => handleRenameGroup(groupName)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameGroup(groupName);
+                      if (e.key === 'Escape') setRenamingGroup(null);
+                    }}
+                  />
+                ) : (
+                  <span className="group-name">{displayName}</span>
+                )}
+                <span className="group-count">
+                  {items.filter((i) => i.completed).length}/{items.length}
+                </span>
+                {isEditable && renamingGroup !== groupName && (
+                  <div className="group-actions">
+                    {!isFirst && (
+                      <button className="group-action" title="Move up" onClick={() => handleMoveGroup(groupName, 'up')}>
+                        <ChevronUp size={12} />
+                      </button>
+                    )}
+                    {!isLast && (
+                      <button className="group-action" title="Move down" onClick={() => handleMoveGroup(groupName, 'down')}>
+                        <ChevronDown size={12} />
+                      </button>
+                    )}
+                    {!isGeneral && (
                       <button
                         className="group-action"
                         title="Rename group"
-                        onClick={() => {
-                          setRenamingGroup(groupName);
-                          setRenameGroupValue(groupName);
-                        }}
+                        onClick={() => { setRenamingGroup(groupName); setRenameGroupValue(groupName); }}
                       >
                         <Pencil size={12} />
                       </button>
-                      <button
-                        className="group-action danger"
-                        title="Delete group"
-                        onClick={() => setDeleteGroupName(groupName)}
-                      >
+                    )}
+                    {!isGeneral && (
+                      <button className="group-action danger" title="Delete group" onClick={() => setDeleteGroupName(groupName)}>
                         <Trash2 size={12} />
                       </button>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
+
               {items.map((item) => (
                 <ChecklistItemRow
                   key={item.id}
@@ -616,21 +652,23 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
                   onDelete={handleDeleteItem}
                 />
               ))}
-              {/* Inline add to this group */}
-              {isEditable && !isUngrouped && (
+
+              {/* Per-group dotted add row */}
+              {isEditable && (
                 <div className="group-add-row">
                   <Plus size={14} className="group-add-icon" />
                   <input
                     className="group-add-input"
-                    placeholder={`Add to ${groupName}...`}
-                    value={groupAddTitle[groupName] ?? ''}
-                    onChange={(e) =>
-                      setGroupAddTitle((prev) => ({ ...prev, [groupName]: e.target.value }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddItemToGroup(groupName);
-                    }}
+                    placeholder={`Add to ${displayName}…`}
+                    value={addTitle}
+                    onChange={(e) => setGroupAddTitle((prev) => ({ ...prev, [groupName]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddItemToGroup(groupName); }}
                   />
+                  {addTitle && (
+                    <button className="group-add-btn" onClick={() => handleAddItemToGroup(groupName)}>
+                      Add
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -649,82 +687,30 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
           </div>
         )}
 
-        {totalCount === 0 && isEditable && (
-          <div className="empty-items">
-            <p>No items yet. Add your first item below.</p>
-          </div>
-        )}
-
-        {/* Add new group + add item row (owner/editor only) */}
+        {/* Add new named group */}
         {isEditable && (
-          <>
-            {showNewGroupInput ? (
-              <div className="add-group-row">
-                <FolderPlus size={14} />
-                <input
-                  className="add-group-input"
-                  placeholder="Group name..."
-                  autoFocus
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  onBlur={handleAddGroup}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddGroup();
-                    if (e.key === 'Escape') {
-                      setShowNewGroupInput(false);
-                      setNewGroupName('');
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              <button className="new-group-btn" onClick={() => setShowNewGroupInput(true)}>
-                <FolderPlus size={14} />
-                New group
-              </button>
-            )}
-
-            <div className="add-item-row">
-              <Plus size={16} className="add-icon" />
+          showNewGroupInput ? (
+            <div className="add-group-row">
+              <FolderPlus size={14} />
               <input
-                ref={addInputRef}
-                className="add-input"
-                placeholder="Add an item..."
-                value={newItemTitle}
-                onChange={(e) => setNewItemTitle(e.target.value)}
+                className="add-group-input"
+                placeholder="Group name…"
+                autoFocus
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onBlur={handleAddGroup}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddItem();
+                  if (e.key === 'Enter') handleAddGroup();
+                  if (e.key === 'Escape') { setShowNewGroupInput(false); setNewGroupName(''); }
                 }}
               />
-              {namedGroupCount > 0 || newItemGroup ? (
-                <select
-                  className="group-select"
-                  value={newItemGroup}
-                  onChange={(e) => setNewItemGroup(e.target.value)}
-                >
-                  <option value="">Ungrouped</option>
-                  {grouped
-                    .filter((g) => g.groupName)
-                    .map((g) => (
-                      <option key={g.groupName} value={g.groupName}>
-                        {g.groupName}
-                      </option>
-                    ))}
-                  {newItemGroup &&
-                    !grouped.some((g) => g.groupName === newItemGroup) && (
-                      <option value={newItemGroup}>{newItemGroup} (new)</option>
-                    )}
-                </select>
-              ) : null}
-              <button
-                className="add-btn"
-                onClick={() => handleAddItem()}
-                disabled={!newItemTitle.trim() || addingItem}
-              >
-                Add
-              </button>
             </div>
-          </>
+          ) : (
+            <button className="new-group-btn" onClick={() => setShowNewGroupInput(true)}>
+              <FolderPlus size={14} />
+              Add group
+            </button>
+          )
         )}
       </div>
 
@@ -1194,6 +1180,15 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
           padding: 2px 0;
         }
         .group-add-input:focus { border-bottom-color: var(--primary, #6366f1); }
+        .group-add-btn {
+          padding: 4px 12px;
+          border-radius: 6px;
+          background: var(--primary, #6366f1);
+          color: white; border: none; cursor: pointer;
+          font-size: 12px; font-weight: 500;
+          white-space: nowrap;
+        }
+        .group-add-btn:hover { opacity: 0.9; }
 
         .paywall-card {
           margin: 24px 0; padding: 24px;

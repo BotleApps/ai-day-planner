@@ -1112,6 +1112,75 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         onCancel={() => setShowDeleteConfirm(false)}
       />
 
+      {/* Edit Plan Modal */}
+      {showEditPlanModal && (
+        <div className="edit-overlay" onClick={() => setShowEditPlanModal(false)}>
+          <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="edit-head">
+              <h3>Edit plan</h3>
+              <button className="edit-close" onClick={() => setShowEditPlanModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="edit-body">
+              <label className="edit-field">
+                <span>Title</span>
+                <input
+                  value={editPlanData.title}
+                  onChange={(e) => setEditPlanData((d) => ({ ...d, title: e.target.value }))}
+                  placeholder="Plan title"
+                />
+              </label>
+              <label className="edit-field">
+                <span>Destination</span>
+                <input
+                  value={editPlanData.destination}
+                  onChange={(e) => setEditPlanData((d) => ({ ...d, destination: e.target.value }))}
+                  placeholder="e.g. Tokyo, Japan"
+                />
+              </label>
+              <label className="edit-field">
+                <span>Description</span>
+                <textarea
+                  value={editPlanData.description}
+                  onChange={(e) => setEditPlanData((d) => ({ ...d, description: e.target.value }))}
+                  placeholder="Optional notes"
+                  rows={3}
+                />
+              </label>
+              <div className="edit-row">
+                <label className="edit-field">
+                  <span>Start date</span>
+                  <input
+                    type="date"
+                    value={editPlanData.startDate}
+                    onChange={(e) => setEditPlanData((d) => ({ ...d, startDate: e.target.value }))}
+                  />
+                </label>
+                <label className="edit-field">
+                  <span>End date</span>
+                  <input
+                    type="date"
+                    value={editPlanData.endDate}
+                    onChange={(e) => setEditPlanData((d) => ({ ...d, endDate: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="edit-foot">
+              <button className="edit-cancel" onClick={() => setShowEditPlanModal(false)}>Cancel</button>
+              <button
+                className="edit-save"
+                onClick={handleSaveEditPlan}
+                disabled={editPlanSaving || !editPlanData.title.trim() || !editPlanData.startDate || !editPlanData.endDate}
+              >
+                {editPlanSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Activity detail popup — for list-view clicks */}
       {viewingActivity && (
         <ActivityDetailPopup
@@ -2272,6 +2341,62 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
             bottom: calc(24px + env(safe-area-inset-bottom));
           }
         }
+
+        /* Edit Plan modal */
+        .edit-overlay {
+          position: fixed; inset: 0; z-index: 1100;
+          background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 20px;
+        }
+        .edit-modal {
+          background: var(--card); border: 1px solid var(--border);
+          border-radius: 18px; width: 100%; max-width: 440px;
+          max-height: 90vh; overflow: auto;
+          display: flex; flex-direction: column;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+        }
+        .edit-head {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 18px; border-bottom: 1px solid var(--border);
+        }
+        .edit-head h3 { margin: 0; font-size: 16px; font-weight: 700; color: var(--foreground); }
+        .edit-close {
+          background: none; border: none; cursor: pointer;
+          color: var(--muted-foreground); padding: 4px; border-radius: 6px;
+          display: flex;
+        }
+        .edit-close:hover { background: var(--muted); color: var(--foreground); }
+        .edit-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+        .edit-field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .edit-field > span { font-weight: 500; color: var(--muted-foreground); font-size: 12px; }
+        .edit-field input, .edit-field textarea {
+          background: var(--background); border: 1px solid var(--border);
+          border-radius: 10px; padding: 10px 12px; font-size: 14px;
+          color: var(--foreground); font-family: inherit; outline: none;
+          transition: border-color 0.15s;
+        }
+        .edit-field input:focus, .edit-field textarea:focus { border-color: var(--primary); }
+        .edit-field textarea { resize: vertical; }
+        .edit-row { display: flex; gap: 12px; }
+        .edit-foot {
+          display: flex; justify-content: flex-end; gap: 10px;
+          padding: 12px 18px 16px; border-top: 1px solid var(--border);
+        }
+        .edit-cancel, .edit-save {
+          padding: 10px 18px; border-radius: 10px; font-size: 13px;
+          font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .edit-cancel {
+          background: var(--muted); border: 1px solid var(--border);
+          color: var(--foreground);
+        }
+        .edit-cancel:hover { background: var(--border); }
+        .edit-save {
+          background: var(--primary); border: none; color: #fff;
+        }
+        .edit-save:hover:not(:disabled) { opacity: 0.9; }
+        .edit-save:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </div>
   );

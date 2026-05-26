@@ -329,10 +329,10 @@ export default function CreateChecklistModal({
                 value={aiPrompt}
                 onChange={e => setAiPrompt(e.target.value)}
                 rows={4}
-                maxLength={500}
+                maxLength={5000}
                 disabled={isGenerating}
               />
-              <div className="char-count">{aiPrompt.length}/500</div>
+              <div className="char-count">{aiPrompt.length}/5000</div>
               <div className="examples-row">
                 {EXAMPLES.map(ex => (
                   <button key={ex} className="example-chip" onClick={() => setAiPrompt(ex)}>{ex}</button>

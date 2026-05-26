@@ -55,7 +55,7 @@ export function ChecklistItemRow({ item, isOwner, onToggle, onUpdate, onDelete }
         disabled={!isOwner}
         aria-label={item.completed ? 'Mark incomplete' : 'Mark complete'}
       >
-        {item.completed && <Check size={12} strokeWidth={3} />}
+        {item.completed && <Check size={14} strokeWidth={3} />}
       </button>
 
       <div className="item-content">
@@ -125,9 +125,9 @@ export function ChecklistItemRow({ item, isOwner, onToggle, onUpdate, onDelete }
           opacity: 0.5;
         }
         .item-checkbox {
-          width: 20px;
-          height: 20px;
-          min-width: 20px;
+          width: 24px;
+          height: 24px;
+          min-width: 24px;
           border-radius: 50%;
           border: 2px solid var(--primary, #6366f1);
           background: transparent;

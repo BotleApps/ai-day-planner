@@ -916,7 +916,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           display: flex;
           background: var(--card);
           border-top: 1px solid var(--border);
-          padding-bottom: env(safe-area-inset-bottom, 0px);
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
         }
