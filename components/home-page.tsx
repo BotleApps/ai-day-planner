@@ -862,7 +862,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         }
 
         /* Overlay to close popups */
-        .global-overlay { position: fixed; inset: 0; z-index: 199; }
+        .global-overlay { position: fixed; inset: 0; z-index: 49; }
 
         .user-menu {
           display: flex;

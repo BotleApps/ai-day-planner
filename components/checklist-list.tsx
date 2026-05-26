@@ -82,7 +82,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
 
   const filtered = processChecklists(tab === 'mine' ? checklists : sharedChecklists);
   const activeList = tab === 'mine' ? checklists : sharedChecklists;
-  const showToolbar = tab !== 'templates' && activeList.length > 0;
+  const showFilterSort = tab !== 'templates';
 
   if (isLoading) {
     return (
@@ -99,9 +99,8 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
 
   return (
     <div className="checklist-list">
-      {/* Search / Filter / Sort toolbar — shown when list has items */}
-      {showToolbar && (
-        <div className="list-toolbar">
+      {/* Search always visible; filter/sort hidden on templates tab */}
+      <div className="list-toolbar">
           <div className="search-field">
             <Search size={15} className="sf-icon" />
             <input
@@ -114,56 +113,57 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
               <button className="sf-clear" onClick={() => setSearchQuery('')}><X size={13} /></button>
             )}
           </div>
-          <div className="toolbar-btns">
-            <div className="tb-wrap">
-              <button
-                className={`tb-btn${checklistFilter !== 'all' ? ' tb-active' : ''}`}
-                title="Filter"
-                onClick={() => { setShowFilter(f => !f); setShowSort(false); }}
-              >
-                <Filter size={15} />
-              </button>
-              {showFilter && (
-                <div className="tb-dropdown">
-                  <p className="tb-dd-title">Filter</p>
-                  {(['all', 'in-progress', 'completed'] as const).map(f => (
-                    <button
-                      key={f}
-                      className={`tb-dd-opt${checklistFilter === f ? ' selected' : ''}`}
-                      onClick={() => { setChecklistFilter(f); setShowFilter(false); }}
-                    >
-                      {f === 'all' ? 'All checklists' : f === 'in-progress' ? 'In progress' : 'Completed'}
-                    </button>
-                  ))}
-                </div>
-              )}
+          {showFilterSort && (
+            <div className="toolbar-btns">
+              <div className="tb-wrap">
+                <button
+                  className={`tb-btn${checklistFilter !== 'all' ? ' tb-active' : ''}`}
+                  title="Filter"
+                  onClick={() => { setShowFilter(f => !f); setShowSort(false); }}
+                >
+                  <Filter size={15} />
+                </button>
+                {showFilter && (
+                  <div className="tb-dropdown">
+                    <p className="tb-dd-title">Filter</p>
+                    {(['all', 'in-progress', 'completed'] as const).map(f => (
+                      <button
+                        key={f}
+                        className={`tb-dd-opt${checklistFilter === f ? ' selected' : ''}`}
+                        onClick={() => { setChecklistFilter(f); setShowFilter(false); }}
+                      >
+                        {f === 'all' ? 'All checklists' : f === 'in-progress' ? 'In progress' : 'Completed'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="tb-wrap">
+                <button
+                  className={`tb-btn${checklistSort !== 'newest' ? ' tb-active' : ''}`}
+                  title="Sort"
+                  onClick={() => { setShowSort(s => !s); setShowFilter(false); }}
+                >
+                  <ArrowUpDown size={15} />
+                </button>
+                {showSort && (
+                  <div className="tb-dropdown">
+                    <p className="tb-dd-title">Sort by</p>
+                    {(['newest', 'oldest', 'az', 'items'] as const).map(s => (
+                      <button
+                        key={s}
+                        className={`tb-dd-opt${checklistSort === s ? ' selected' : ''}`}
+                        onClick={() => { setChecklistSort(s); setShowSort(false); }}
+                      >
+                        {s === 'newest' ? 'Newest first' : s === 'oldest' ? 'Oldest first' : s === 'az' ? 'A → Z' : 'Most items'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="tb-wrap">
-              <button
-                className={`tb-btn${checklistSort !== 'newest' ? ' tb-active' : ''}`}
-                title="Sort"
-                onClick={() => { setShowSort(s => !s); setShowFilter(false); }}
-              >
-                <ArrowUpDown size={15} />
-              </button>
-              {showSort && (
-                <div className="tb-dropdown">
-                  <p className="tb-dd-title">Sort by</p>
-                  {(['newest', 'oldest', 'az', 'items'] as const).map(s => (
-                    <button
-                      key={s}
-                      className={`tb-dd-opt${checklistSort === s ? ' selected' : ''}`}
-                      onClick={() => { setChecklistSort(s); setShowSort(false); }}
-                    >
-                      {s === 'newest' ? 'Newest first' : s === 'oldest' ? 'Oldest first' : s === 'az' ? 'A → Z' : 'Most items'}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
-      )}
 
       {/* Tab bar */}
       <div className="tabs-bar">
@@ -193,7 +193,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
 
       {/* Templates tab */}
       {tab === 'templates' ? (
-        <TemplatesSection onUseTemplate={(id, _title) => onUseTemplate(id)} />
+        <TemplatesSection onUseTemplate={(id, _title) => onUseTemplate(id)} searchQuery={searchQuery} />
       ) : (
         <>
           {/* Content */}
@@ -304,7 +304,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
           color: var(--primary, #6366f1); font-weight: 600;
           background: color-mix(in srgb, var(--primary, #6366f1) 8%, transparent);
         }
-        .cl-overlay { position: fixed; inset: 0; z-index: 199; }
+        .cl-overlay { position: fixed; inset: 0; z-index: 49; }
 
         .tabs-bar {
           display: flex;

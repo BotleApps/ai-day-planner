@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Search, X, LayoutTemplate, Plus, Globe, User,
+  LayoutTemplate, Plus, Globe, User,
   Trash2, Upload, CheckCircle2, MoreVertical, BookOpen,
 } from 'lucide-react';
 
@@ -42,17 +42,22 @@ const CAT_COLORS: Record<string, { bg: string; color: string }> = {
 
 interface TemplatesSectionProps {
   onUseTemplate: (templateId: string, templateTitle: string) => void;
+  searchQuery?: string;
 }
 
-export function TemplatesSection({ onUseTemplate }: TemplatesSectionProps) {
+export function TemplatesSection({ onUseTemplate, searchQuery: externalQuery }: TemplatesSectionProps) {
   const [tab, setTab] = useState<'browse' | 'mine'>('browse');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(externalQuery ?? '');
   const [category, setCategory] = useState('all');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    setQuery(externalQuery ?? '');
+  }, [externalQuery]);
 
   const fetchTemplates = useCallback(async () => {
     setIsLoading(true);
@@ -118,22 +123,9 @@ export function TemplatesSection({ onUseTemplate }: TemplatesSectionProps) {
         </button>
       </div>
 
-      {/* Search — browse only */}
+      {/* Category chips — browse only */}
       {tab === 'browse' && (
         <>
-          <div className="ts-search">
-            <Search size={16} className="ts-search-icon" />
-            <input
-              className="ts-search-input"
-              placeholder="Search templates..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-            {query && (
-              <button className="ts-clear" onClick={() => setQuery('')}><X size={14} /></button>
-            )}
-          </div>
-
           <div className="ts-cats">
             {CATEGORIES.map(cat => (
               <button
@@ -298,36 +290,6 @@ export function TemplatesSection({ onUseTemplate }: TemplatesSectionProps) {
         .ts-tab.active {
           color: var(--primary);
           border-bottom-color: var(--primary);
-        }
-
-        /* Search */
-        .ts-search {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin: 12px 16px 0;
-          padding: 10px 14px;
-          background: var(--muted);
-          border-radius: 12px;
-          flex-shrink: 0;
-        }
-        .ts-search-icon { color: var(--muted-foreground); flex-shrink: 0; }
-        .ts-search-input {
-          flex: 1;
-          border: none;
-          background: none;
-          font-size: 15px;
-          color: var(--foreground);
-          outline: none;
-        }
-        .ts-search-input::placeholder { color: var(--muted-foreground); }
-        .ts-clear {
-          background: none;
-          border: none;
-          color: var(--muted-foreground);
-          cursor: pointer;
-          display: flex;
-          padding: 2px;
         }
 
         /* Category chips */
