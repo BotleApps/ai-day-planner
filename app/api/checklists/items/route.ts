@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { auth } from '@/auth';
+import { resolveChecklistPermission } from '@/lib/checklist-access';
 
-async function verifyOwnership(checklistId: string, userId: string) {
-  return prisma.checklist.findFirst({ where: { id: checklistId, userId } });
+async function verifyWriteAccess(checklistId: string, userId: string) {
+  const perm = await resolveChecklistPermission(checklistId, userId);
+  return perm === 'owner' || perm === 'edit';
 }
 
 function shapeItem(item: {
@@ -27,9 +29,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'checklistId and title are required' }, { status: 400 });
     }
 
-    const checklist = await verifyOwnership(checklistId, session.user.id);
-    if (!checklist) {
-      return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+    if (!(await verifyWriteAccess(checklistId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const count = await prisma.checklistItem.count({ where: { checklistId } });
@@ -68,9 +69,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'id and checklistId are required' }, { status: 400 });
     }
 
-    const checklist = await verifyOwnership(checklistId, session.user.id);
-    if (!checklist) {
-      return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+    if (!(await verifyWriteAccess(checklistId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const data: Record<string, unknown> = {};
@@ -106,9 +106,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id and checklistId are required' }, { status: 400 });
     }
 
-    const checklist = await verifyOwnership(checklistId, session.user.id);
-    if (!checklist) {
-      return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+    if (!(await verifyWriteAccess(checklistId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     await prisma.checklistItem.deleteMany({ where: { id, checklistId } });
@@ -121,7 +120,7 @@ export async function DELETE(request: Request) {
   }
 }
 
-// Bulk reorder
+// Bulk reorder OR bulk group rename/delete
 export async function PATCH(request: Request) {
   try {
     const session = await auth();
@@ -130,31 +129,61 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { checklistId, items } = body;
+    const { checklistId, items, renameGroup, deleteGroup } = body;
 
-    if (!checklistId || !Array.isArray(items)) {
-      return NextResponse.json({ error: 'checklistId and items are required' }, { status: 400 });
+    if (!checklistId) {
+      return NextResponse.json({ error: 'checklistId is required' }, { status: 400 });
     }
 
-    const checklist = await verifyOwnership(checklistId, session.user.id);
-    if (!checklist) {
-      return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
+    if (!(await verifyWriteAccess(checklistId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await prisma.$transaction(
-      items.map((item: { id: string; order: number }) =>
-        prisma.checklistItem.updateMany({
-          where: { id: item.id, checklistId },
-          data: { order: item.order },
-        })
-      )
-    );
+    // Rename a group (move all items from one groupName to another)
+    if (renameGroup && typeof renameGroup.from === 'string' && typeof renameGroup.to === 'string') {
+      await prisma.checklistItem.updateMany({
+        where: { checklistId, groupName: renameGroup.from },
+        data: { groupName: renameGroup.to },
+      });
+      await prisma.checklist.update({ where: { id: checklistId }, data: { updatedAt: new Date() } });
+      return NextResponse.json({ success: true });
+    }
 
-    await prisma.checklist.update({ where: { id: checklistId }, data: { updatedAt: new Date() } });
+    // Delete a group: either delete all items (deleteGroup.removeItems) or move them to ungrouped
+    if (deleteGroup && typeof deleteGroup.name === 'string') {
+      if (deleteGroup.removeItems) {
+        await prisma.checklistItem.deleteMany({
+          where: { checklistId, groupName: deleteGroup.name },
+        });
+      } else {
+        await prisma.checklistItem.updateMany({
+          where: { checklistId, groupName: deleteGroup.name },
+          data: { groupName: '' },
+        });
+      }
+      await prisma.checklist.update({ where: { id: checklistId }, data: { updatedAt: new Date() } });
+      return NextResponse.json({ success: true });
+    }
 
-    return NextResponse.json({ success: true });
+    // Reorder (and optionally group-reassign) items
+    if (Array.isArray(items)) {
+      await prisma.$transaction(
+        items.map((item: { id: string; order: number; groupName?: string }) =>
+          prisma.checklistItem.updateMany({
+            where: { id: item.id, checklistId },
+            data: item.groupName !== undefined
+              ? { order: item.order, groupName: item.groupName }
+              : { order: item.order },
+          })
+        )
+      );
+      await prisma.checklist.update({ where: { id: checklistId }, data: { updatedAt: new Date() } });
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'No operation specified' }, { status: 400 });
   } catch (error) {
-    console.error('Error reordering checklist items:', error);
-    return NextResponse.json({ error: 'Failed to reorder items' }, { status: 500 });
+    console.error('Error patching checklist items:', error);
+    return NextResponse.json({ error: 'Failed to update items' }, { status: 500 });
   }
 }

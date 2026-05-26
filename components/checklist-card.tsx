@@ -17,6 +17,8 @@ export function ChecklistCard({ checklist, onOpen, onShare, onDelete, showMenu, 
   const totalItems = checklist.items.length;
   const completedItems = checklist.items.filter(i => i.completed).length;
   const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  const perm = checklist.userPermission;
+  const isShared = perm === 'view' || perm === 'edit';
 
   const dueDateInfo = (() => {
     if (!checklist.dueDate) return null;
@@ -38,6 +40,11 @@ export function ChecklistCard({ checklist, onOpen, onShare, onDelete, showMenu, 
           <CheckSquare size={18} />
         </div>
         <div className="card-badges">
+          {isShared && (
+            <span className="perm-badge" data-perm={perm}>
+              {perm === 'edit' ? '✏️ Edit' : '👁 View'}
+            </span>
+          )}
           {checklist.planId && (
             <span className="plan-badge">
               <Link2 size={10} />
@@ -61,12 +68,16 @@ export function ChecklistCard({ checklist, onOpen, onShare, onDelete, showMenu, 
         {showMenu && (
           <div className="card-menu" onClick={e => e.stopPropagation()}>
             <button onClick={() => { onOpen(); onToggleMenu(); }}>Open</button>
-            <button onClick={() => { onShare(); onToggleMenu(); }}>
-              <Share2 size={13} /> Share
-            </button>
-            <button className="delete-item" onClick={() => { onDelete(); onToggleMenu(); }}>
-              <Trash2 size={13} /> Delete
-            </button>
+            {!isShared && (
+              <button onClick={() => { onShare(); onToggleMenu(); }}>
+                <Share2 size={13} /> Share
+              </button>
+            )}
+            {!isShared && (
+              <button className="delete-item" onClick={() => { onDelete(); onToggleMenu(); }}>
+                <Trash2 size={13} /> Delete
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -129,7 +140,7 @@ export function ChecklistCard({ checklist, onOpen, onShare, onDelete, showMenu, 
           flex: 1;
           flex-wrap: wrap;
         }
-        .due-badge, .plan-badge {
+        .due-badge, .plan-badge, .perm-badge {
           display: flex;
           align-items: center;
           gap: 4px;
@@ -142,6 +153,8 @@ export function ChecklistCard({ checklist, onOpen, onShare, onDelete, showMenu, 
           background: #eff6ff;
           color: #1d4ed8;
         }
+        .perm-badge[data-perm="view"] { background: #eff6ff; color: #1d4ed8; }
+        .perm-badge[data-perm="edit"] { background: #ecfdf5; color: #047857; }
         .menu-btn {
           background: none;
           border: none;

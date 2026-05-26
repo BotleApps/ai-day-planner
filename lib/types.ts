@@ -271,6 +271,23 @@ export interface Checklist {
   createdAt: Date;
   updatedAt: Date;
   items: ChecklistItem[];
+  userPermission?: 'owner' | 'edit' | 'view';
+}
+
+export interface ChecklistShareLinkInfo {
+  id: string;
+  token: string;
+  permission: 'view' | 'edit';
+  isActive: boolean;
+}
+
+export interface ChecklistMemberInfo {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  permission: 'view' | 'edit';
+  accessedAt?: string | Date;
 }
 
 export interface ChecklistTemplateItem {

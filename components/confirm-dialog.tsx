@@ -12,6 +12,7 @@ interface ConfirmDialogProps {
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  extraAction?: { label: string; onClick: () => void; danger?: boolean };
 }
 
 export function ConfirmDialog({
@@ -23,6 +24,7 @@ export function ConfirmDialog({
   danger = false,
   onConfirm,
   onCancel,
+  extraAction,
 }: ConfirmDialogProps) {
   // Close on Escape
   useEffect(() => {
@@ -48,6 +50,14 @@ export function ConfirmDialog({
           <button className="btn-cancel" onClick={onCancel}>
             {cancelLabel}
           </button>
+          {extraAction && (
+            <button
+              className={extraAction.danger ? 'btn-confirm danger' : 'btn-confirm'}
+              onClick={extraAction.onClick}
+            >
+              {extraAction.label}
+            </button>
+          )}
           <button
             className={danger ? 'btn-confirm danger' : 'btn-confirm'}
             onClick={onConfirm}

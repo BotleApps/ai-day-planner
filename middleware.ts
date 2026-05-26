@@ -17,6 +17,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // Always allow: all API routes (they handle their own auth internally)
+  if (nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next();
+  }
+
   // Always allow: health check
   if (nextUrl.pathname === '/api/health') {
     return NextResponse.next();

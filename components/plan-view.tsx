@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSession, signIn } from 'next-auth/react';
 import { Plan, DayPlan, Activity, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
 import { formatDate, calculateDayProgress, formatDuration } from '@/lib/utils';
 import Timeline, { ActivityDetailPopup } from '@/components/timeline';
@@ -27,6 +28,8 @@ import {
   Calendar,
   MoreHorizontal,
   Edit2,
+  Users,
+  Lock,
 } from 'lucide-react';
 
 interface PlanViewProps {
@@ -36,6 +39,7 @@ interface PlanViewProps {
 }
 
 export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
+  const { status: sessionStatus } = useSession();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +48,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [newActivityTime, setNewActivityTime] = useState('09:00');
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareModalTab, setShareModalTab] = useState<'links' | 'people'>('links');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [userPermission, setUserPermission] = useState<'owner' | 'edit' | 'view'>('owner');
 
@@ -142,6 +147,23 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
 
   const selectedDay = plan?.days.find(d => d.id === selectedDayId);
   const selectedDayIndex = plan?.days.findIndex(d => d.id === selectedDayId) ?? 0;
+
+  // Unauthenticated viewers of shared plans see only ~70% of activities, then a paywall card.
+  const isUnauthenticatedViewer = !!shareToken && sessionStatus === 'unauthenticated';
+  const previewSlice = useMemo(() => {
+    if (!selectedDay || !isUnauthenticatedViewer) {
+      return { day: selectedDay, hiddenCount: 0 };
+    }
+    const total = selectedDay.activities.length;
+    if (total === 0) return { day: selectedDay, hiddenCount: 0 };
+    const visible = Math.max(1, Math.ceil(total * 0.7));
+    if (visible >= total) return { day: selectedDay, hiddenCount: 0 };
+    const sliced = [...selectedDay.activities]
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+      .slice(0, visible);
+    return { day: { ...selectedDay, activities: sliced }, hiddenCount: total - visible };
+  }, [selectedDay, isUnauthenticatedViewer]);
+  const displayDay = previewSlice.day;
 
   // Sync notes textarea when selected day changes
   useEffect(() => {
@@ -507,7 +529,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                 <StickyNote size={17} />
               </button>
               {userPermission === 'owner' && (
-                <button className="btn-icon" title="Share" onClick={openShareModal}>
+                <button className="btn-icon" title="Sharing" onClick={openShareModal}>
                   <Share2 size={17} />
                 </button>
               )}
@@ -540,7 +562,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                       onClick={() => { openShareModal(); setShowMoreMenu(false); }}
                     >
                       <Share2 size={16} />
-                      Share
+                      Sharing
                     </button>
                   )}
                   {isEditable && (
@@ -679,39 +701,44 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
           }
         }}
       >
-        {selectedDay && viewMode === 'timeline' && (
-          <Timeline
-            day={selectedDay}
-            onActivityUpdate={handleActivityUpdate}
-            onActivityDelete={handleActivityDelete}
-            onActivityReorder={handleActivityReorder}
-            onAddActivity={handleAddActivity}
-            onEditActivity={handleEditActivity}
-            onPopupOpenChange={setIsDetailPopupOpen}
-            isEditable={isEditable}
-          />
+        {displayDay && viewMode === 'timeline' && (
+          <>
+            <Timeline
+              day={displayDay}
+              onActivityUpdate={handleActivityUpdate}
+              onActivityDelete={handleActivityDelete}
+              onActivityReorder={handleActivityReorder}
+              onAddActivity={handleAddActivity}
+              onEditActivity={handleEditActivity}
+              onPopupOpenChange={setIsDetailPopupOpen}
+              isEditable={isEditable && !isUnauthenticatedViewer}
+            />
+            {isUnauthenticatedViewer && previewSlice.hiddenCount > 0 && (
+              <PaywallCard hiddenCount={previewSlice.hiddenCount} kind="activities" />
+            )}
+          </>
         )}
 
-        {selectedDay && viewMode === 'text' && (
+        {displayDay && viewMode === 'text' && (
           <div className="text-view">
             <div className="text-day-header">
-              <h2>{selectedDay.title || `Day ${selectedDay.dayNumber}`}</h2>
+              <h2>{displayDay.title || `Day ${displayDay.dayNumber}`}</h2>
               <span className="text-day-date">
                 <Calendar size={13} />
-                {new Date(selectedDay.date + 'T12:00:00').toLocaleDateString('en', {
+                {new Date(displayDay.date + 'T12:00:00').toLocaleDateString('en', {
                   weekday: 'long', month: 'long', day: 'numeric',
                 })}
               </span>
-              {selectedDay.notes && (
-                <p className="text-day-notes">{selectedDay.notes}</p>
+              {displayDay.notes && (
+                <p className="text-day-notes">{displayDay.notes}</p>
               )}
             </div>
 
-            {selectedDay.activities.length === 0 ? (
+            {displayDay.activities.length === 0 ? (
               <p className="text-empty">No activities planned for this day.</p>
             ) : (
               <div className="text-activities">
-                {[...selectedDay.activities]
+                {[...displayDay.activities]
                   .sort((a, b) => a.startTime.localeCompare(b.startTime))
                   .map((activity) => {
                     const endH = (() => {
@@ -750,6 +777,9 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                     );
                   })}
               </div>
+            )}
+            {isUnauthenticatedViewer && previewSlice.hiddenCount > 0 && (
+              <PaywallCard hiddenCount={previewSlice.hiddenCount} kind="activities" />
             )}
           </div>
         )}
@@ -822,20 +852,42 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         editActivity={editingActivity}
       />
 
-      {/* Share Modal */}
+      {/* Sharing Modal */}
       {showShareModal && (
         <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
           <div className="modal-content share-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Share Plan</h3>
+              <h3>Sharing</h3>
               <button className="close-btn" onClick={() => setShowShareModal(false)}>
                 <X size={20} />
               </button>
             </div>
+
+            {/* Tabs */}
+            <div className="share-tabs">
+              <button
+                className={`share-tab ${shareModalTab === 'links' ? 'active' : ''}`}
+                onClick={() => setShareModalTab('links')}
+              >
+                <Link2 size={14} />
+                Share Links
+              </button>
+              <button
+                className={`share-tab ${shareModalTab === 'people' ? 'active' : ''}`}
+                onClick={() => setShareModalTab('people')}
+              >
+                <Users size={14} />
+                People with Access
+                {shareMembers.length > 0 && (
+                  <span className="share-tab-count">{shareMembers.length}</span>
+                )}
+              </button>
+            </div>
+
             <div className="modal-body">
               {shareLoading ? (
                 <div className="share-loading">Loading…</div>
-              ) : (
+              ) : shareModalTab === 'links' ? (
                 <>
                   {/* View link */}
                   {(() => {
@@ -906,19 +958,29 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                       </div>
                     );
                   })()}
-
-                  {/* Members list */}
-                  {shareMembers.length > 0 && (
-                    <div className="share-members">
-                      <p className="share-members-title">People with access ({shareMembers.length})</p>
-                      {shareMembers.map(member => (
+                </>
+              ) : (
+                /* People with access tab */
+                <div className="share-members">
+                  {shareMembers.length === 0 ? (
+                    <div className="share-empty">
+                      <Users size={32} />
+                      <p>No one has accessed this plan yet.</p>
+                      <p className="share-empty-hint">Generate a share link and send it to collaborators.</p>
+                    </div>
+                  ) : (
+                    shareMembers.map(member => {
+                      const displayName = member.userName || member.userEmail || 'Unknown user';
+                      const displayEmail = member.userEmail || null;
+                      const avatarLetter = displayName[0].toUpperCase();
+                      return (
                         <div key={member.id} className="share-member-row">
-                          <div className="share-member-avatar">
-                            {(member.userName || member.userEmail || '?')[0].toUpperCase()}
-                          </div>
+                          <div className="share-member-avatar">{avatarLetter}</div>
                           <div className="share-member-info">
-                            {member.userName && <span className="share-member-name">{member.userName}</span>}
-                            <span className="share-member-email">{member.userEmail || member.userId}</span>
+                            <span className="share-member-name">{displayName}</span>
+                            {displayEmail && displayEmail !== displayName && (
+                              <span className="share-member-email">{displayEmail}</span>
+                            )}
                           </div>
                           <span className={`share-perm-badge ${member.permission}`}>
                             {member.permission === 'edit' ? '✏️ Edit' : '👁 View'}
@@ -931,10 +993,10 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                             <X size={14} />
                           </button>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })
                   )}
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -1784,6 +1846,52 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         }
 
         /* Share Modal */
+        .share-tabs {
+          display: flex;
+          border-bottom: 1px solid var(--border);
+          padding: 0 20px;
+          gap: 4px;
+        }
+        .share-tab {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 12px;
+          background: none;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: var(--muted-foreground);
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          margin-bottom: -1px;
+          transition: color 0.15s, border-color 0.15s;
+        }
+        .share-tab.active {
+          color: var(--foreground);
+          border-bottom-color: var(--primary, #6366f1);
+        }
+        .share-tab-count {
+          background: var(--primary, #6366f1);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 10px;
+          padding: 1px 6px;
+          min-width: 18px;
+          text-align: center;
+        }
+        .share-empty {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          padding: 32px 0;
+          color: var(--muted-foreground);
+          text-align: center;
+        }
+        .share-empty p { margin: 0; font-size: 14px; }
+        .share-empty-hint { font-size: 12px; opacity: 0.7; }
         .share-loading {
           text-align: center;
           color: var(--muted-foreground);
@@ -2170,3 +2278,64 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
 }
 
 export default PlanView;
+
+function PaywallCard({ hiddenCount, kind }: { hiddenCount: number; kind: string }) {
+  return (
+    <div className="paywall-card">
+      <div className="paywall-icon"><Lock size={20} /></div>
+      <h3 className="paywall-title">{hiddenCount} more {kind} hidden</h3>
+      <p className="paywall-desc">Sign in to see the full plan and save your own copy.</p>
+      <button className="paywall-btn" onClick={() => signIn('google')}>
+        Sign in with Google
+      </button>
+      <style jsx>{`
+        .paywall-card {
+          margin: 16px;
+          padding: 24px 20px;
+          background: var(--card, #fff);
+          border: 1px dashed var(--border, #e5e7eb);
+          border-radius: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          text-align: center;
+        }
+        .paywall-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--primary) 12%, transparent);
+          color: var(--primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 4px;
+        }
+        .paywall-title {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--foreground);
+        }
+        .paywall-desc {
+          margin: 0;
+          font-size: 13px;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .paywall-btn {
+          margin-top: 8px;
+          padding: 10px 18px;
+          border-radius: 10px;
+          border: none;
+          background: var(--primary);
+          color: #fff;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .paywall-btn:hover { opacity: 0.9; }
+      `}</style>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Activity, ActivityType, DayPlan } from '@/lib/types';
 import {
   parseTime,
@@ -661,6 +662,8 @@ export function ActivityDetailPopup({
   const endTime = calculateEndTime(activity);
   const color = getActivityColor(activity.type);
   const icon = getActivityIcon(activity.type);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const statusActions = [
     { status: 'planned' as const, icon: <RotateCcw size={16} />, label: 'Reset', show: activity.status !== 'planned' },
@@ -669,7 +672,7 @@ export function ActivityDetailPopup({
     { status: 'skipped' as const, icon: <SkipForward size={16} />, label: 'Skip', show: activity.status === 'planned' || activity.status === 'in-progress' },
   ].filter(a => a.show);
 
-  return (
+  const content = (
     <>
       <div className="popup-overlay" onClick={onClose} />
       <div className="popup-container">
@@ -1096,6 +1099,8 @@ export function ActivityDetailPopup({
       `}</style>
     </>
   );
+
+  return mounted ? createPortal(content, document.body) : null;
 }
 
 export default Timeline;

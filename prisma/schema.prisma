@@ -149,6 +149,7 @@ model Checklist {
 
   items        ChecklistItem[]
   sharedAccess SharedChecklistAccess[]
+  shareLinks   ChecklistShareLink[]
 
   @@index([userId])
   @@index([planId])
@@ -204,12 +205,31 @@ model ChecklistTemplateItem {
 model SharedChecklistAccess {
   id          String    @id @default(cuid())
   userId      String
+  userEmail   String    @default("")
+  userName    String    @default("")
   checklistId String
+  permission  String    @default("view")
+  linkId      String?
   checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  shareLink   ChecklistShareLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
   accessedAt  DateTime  @default(now())
 
   @@unique([userId, checklistId])
   @@index([userId])
+}
+
+model ChecklistShareLink {
+  id          String                  @id @default(cuid())
+  checklistId String
+  token       String                  @unique
+  permission  String
+  isActive    Boolean                 @default(true)
+  createdAt   DateTime                @default(now())
+  checklist   Checklist               @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  members     SharedChecklistAccess[]
+
+  @@index([token])
+  @@index([checklistId])
 }
 
 model UserSettings {

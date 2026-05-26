@@ -20,7 +20,6 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
   const [tab, setTab] = useState<'mine' | 'shared' | 'templates'>('mine');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [shareLinkMap, setShareLinkMap] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -57,23 +56,9 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
     setDeleteId(null);
   };
 
-  const handleShare = async (id: string) => {
-    const existing = checklists.find(c => c.id === id);
-    if (existing?.shareLink) {
-      setShareLinkMap(prev => ({ ...prev, [id]: existing.shareLink! }));
-      return;
-    }
-    const res = await fetch('/api/checklists', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (data.shareLink) {
-      setShareLinkMap(prev => ({ ...prev, [id]: data.shareLink }));
-      setChecklists(prev => prev.map(c => c.id === id ? { ...c, shareLink: data.shareLink, isPublic: true } : c));
-      navigator.clipboard.writeText(`${window.location.origin}/?cshare=${data.shareLink}`).catch(() => {});
-    }
+  const handleShare = (id: string) => {
+    // Opening the checklist exposes the full sharing modal (links, members, templates)
+    onSelectChecklist(id);
   };
 
   const filtered = (tab === 'mine' ? checklists : sharedChecklists).filter(c =>
