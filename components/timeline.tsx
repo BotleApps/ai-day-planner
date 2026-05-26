@@ -40,6 +40,7 @@ interface TimelineProps {
   onAddActivity: (startTime: string) => void;
   onEditActivity?: (activity: Activity) => void;
   isEditable?: boolean;
+  onPopupOpenChange?: (isOpen: boolean) => void;
 }
 
 const HOUR_HEIGHT = 80; // pixels per hour
@@ -54,6 +55,7 @@ export function Timeline({
   onAddActivity,
   onEditActivity,
   isEditable = true,
+  onPopupOpenChange,
 }: TimelineProps) {
   const [draggedActivity, setDraggedActivity] = useState<string | null>(null);
   const [dropTargetTime, setDropTargetTime] = useState<string | null>(null);
@@ -203,6 +205,7 @@ export function Timeline({
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedActivity(activity);
+                  onPopupOpenChange?.(true);
                 }}
               >
                 <div className="activity-color-bar" style={{ backgroundColor: color }} />
@@ -291,20 +294,23 @@ export function Timeline({
       {selectedActivity && (
         <ActivityDetailPopup
           activity={selectedActivity}
-          onClose={() => setSelectedActivity(null)}
+          onClose={() => { setSelectedActivity(null); onPopupOpenChange?.(false); }}
           onStatusChange={(status) => {
             handleStatusChange(selectedActivity, status);
             setSelectedActivity(null);
+            onPopupOpenChange?.(false);
           }}
           onEdit={() => {
             if (onEditActivity) {
               onEditActivity(selectedActivity);
             }
             setSelectedActivity(null);
+            onPopupOpenChange?.(false);
           }}
           onDelete={() => {
             onActivityDelete(selectedActivity.id);
             setSelectedActivity(null);
+            onPopupOpenChange?.(false);
           }}
         />
       )}
@@ -639,7 +645,7 @@ export function Timeline({
 }
 
 // Activity Detail Popup Component
-function ActivityDetailPopup({
+export function ActivityDetailPopup({
   activity,
   onClose,
   onStatusChange,
@@ -782,7 +788,7 @@ function ActivityDetailPopup({
           inset: 0;
           background: rgba(0, 0, 0, 0.5);
           backdrop-filter: blur(4px);
-          z-index: 200;
+          z-index: 9000;
           animation: fadeIn 0.15s ease;
         }
 
@@ -798,7 +804,7 @@ function ActivityDetailPopup({
           right: 0;
           background: var(--card);
           border-radius: 20px 20px 0 0;
-          z-index: 201;
+          z-index: 9001;
           animation: slideUp 0.25s ease;
           max-height: 88svh;
           display: flex;

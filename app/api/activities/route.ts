@@ -32,7 +32,7 @@ function shapeActivity(act: any) {
   };
 }
 
-// Verify the requesting user can access this plan (owner or public)
+// Verify read access (owner, active shared access, or public plan)
 async function getPlanAccess(planId: string, userId: string) {
   return prisma.plan.findFirst({
     where: {
@@ -40,6 +40,17 @@ async function getPlanAccess(planId: string, userId: string) {
       OR: [{ createdBy: userId }, { isPublic: true }],
     },
   });
+}
+
+// Verify write access (owner or active edit-permission shared access)
+async function canWritePlan(planId: string, userId: string): Promise<boolean> {
+  const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: userId } });
+  if (plan) return true;
+  const access = await prisma.sharedAccess.findUnique({
+    where: { userId_planId: { userId, planId } },
+    include: { shareLink: true },
+  });
+  return access?.permission === 'edit' && (access.shareLink?.isActive ?? false);
 }
 
 // GET activities for a day
@@ -89,9 +100,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Plan ID, Day ID, and activity are required' }, { status: 400 });
     }
 
-    // Verify ownership (only owner can add activities)
-    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    // Verify write access (owner or active edit-permission shared access)
+    const plan = await prisma.plan.findFirst({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    if (!(await canWritePlan(planId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const day = await prisma.dayPlan.findFirst({ where: { id: dayId, planId } });
     if (!day) return NextResponse.json({ error: 'Day not found' }, { status: 404 });
@@ -149,8 +163,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Plan ID, Day ID, and Activity ID are required' }, { status: 400 });
     }
 
-    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    const plan = await prisma.plan.findFirst({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    if (!(await canWritePlan(planId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Build safe update object (only known scalar fields)
     const data: Record<string, any> = {};
@@ -199,8 +216,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Plan ID, Day ID, and Activity ID are required' }, { status: 400 });
     }
 
-    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    const plan = await prisma.plan.findFirst({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    if (!(await canWritePlan(planId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     await prisma.activity.deleteMany({ where: { id: activityId, dayPlanId: dayId } });
 
@@ -228,8 +248,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Plan ID and Day ID are required' }, { status: 400 });
     }
 
-    const plan = await prisma.plan.findFirst({ where: { id: planId, createdBy: session.user.id } });
+    const plan = await prisma.plan.findFirst({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    if (!(await canWritePlan(planId, session.user.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Save day notes if provided
     if (notes !== undefined) {

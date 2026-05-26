@@ -256,14 +256,14 @@ export default function IntelligencePage() {
           <div className="provider-cards">
             {/* Google Gemini — first / recommended */}
             <button className="provider-card provider-card--gemini" onClick={() => selectProvider('gemini')}>
-              <div className="pcard-top">
-                <div className="pcard-icon pcard-icon--gemini">
-                  <Bot size={24} />
-                </div>
-                <span className="pcard-badge">Recommended</span>
+              <div className="pcard-icon pcard-icon--gemini">
+                <Bot size={24} />
               </div>
               <div className="pcard-body">
-                <span className="pcard-name">Google Gemini</span>
+                <div className="pcard-name-row">
+                  <span className="pcard-name">Google Gemini</span>
+                  <span className="pcard-badge">Recommended</span>
+                </div>
                 <span className="pcard-desc">Gemini 2.5 Pro, Flash, and more — free API key from Google AI Studio</span>
               </div>
               <ChevronRight size={18} className="pcard-arrow" />
@@ -271,10 +271,8 @@ export default function IntelligencePage() {
 
             {/* SAP AI Core */}
             <button className="provider-card provider-card--sap" onClick={() => selectProvider('sap')}>
-              <div className="pcard-top">
-                <div className="pcard-icon pcard-icon--sap">
-                  <Bot size={24} />
-                </div>
+              <div className="pcard-icon pcard-icon--sap">
+                <Bot size={24} />
               </div>
               <div className="pcard-body">
                 <span className="pcard-name">SAP AI Core</span>
@@ -1070,10 +1068,11 @@ export default function IntelligencePage() {
           border-color: var(--primary);
           box-shadow: 0 6px 24px color-mix(in srgb, var(--primary) 18%, transparent);
         }
-        .pcard-top {
+        .pcard-name-row {
           display: flex;
-          align-items: flex-start;
-          gap: 10px;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
         }
         .pcard-icon {
           width: 48px;

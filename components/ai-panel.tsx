@@ -144,7 +144,7 @@ export function AIPanel({
           id: generateId(),
           role: 'assistant',
           content: isNotConfigured
-            ? 'AI is not configured yet. Go to Settings to connect SAP AI Core.'
+            ? 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.'
             : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
           timestamp: new Date(),
         },
@@ -186,7 +186,7 @@ export function AIPanel({
               id: generateId(),
               role: 'assistant',
               content: isNotConfigured
-                ? 'AI is not configured. Go to Settings → Intelligence to connect SAP AI Core.'
+                ? 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.'
                 : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
               timestamp: new Date(),
             },
@@ -254,7 +254,7 @@ export function AIPanel({
           {!aiConfigured && (
             <div className="config-banner">
               <Sparkles size={15} />
-              <span>Connect SAP AI Core to enable real intelligence.</span>
+              <span>Connect an AI provider to enable real intelligence.</span>
               <button className="config-link" onClick={() => router.push('/settings')}>
                 <Settings size={13} />
                 Settings

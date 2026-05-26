@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export function SplashScreen() {
-  const [phase, setPhase] = useState<'in' | 'hold' | 'out' | 'done'>('in');
+  const [phase, setPhase] = useState<'hold' | 'out' | 'done'>('hold');
 
   useEffect(() => {
     // Only show once per browser session
@@ -13,16 +13,15 @@ export function SplashScreen() {
     }
     sessionStorage.setItem('sp:splashed', '1');
 
-    const t1 = setTimeout(() => setPhase('hold'), 400);
-    const t2 = setTimeout(() => setPhase('out'), 1600);
-    const t3 = setTimeout(() => setPhase('done'), 2200);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    const t1 = setTimeout(() => setPhase('out'), 1600);
+    const t2 = setTimeout(() => setPhase('done'), 2200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
   if (phase === 'done') return null;
 
   return (
-    <div className={`splash ${phase}`} aria-hidden="true">
+    <div className={`splash splash-${phase}`} aria-hidden="true">
       <div className="splash-content">
         <div className="splash-icon">
           <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={52} height={52} />
@@ -42,13 +41,10 @@ export function SplashScreen() {
           display: flex;
           align-items: center;
           justify-content: center;
-          opacity: 0;
-          transition: opacity 0.4s ease;
+          opacity: 1;
           pointer-events: all;
         }
-        .splash.in    { opacity: 0; }
-        .splash.hold  { opacity: 1; }
-        .splash.out   { opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
+        .splash-out { opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
 
         .splash-content {
           display: flex;

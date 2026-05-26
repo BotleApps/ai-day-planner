@@ -71,11 +71,15 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [aiProviderLabel, setAiProviderLabel] = useState('AI Provider');
 
   useEffect(() => {
     setMounted(true);
     const s = loadAISettings();
     setAiConfigured(isAIConfigured(s));
+    if (s.provider === 'gemini') setAiProviderLabel('Google Gemini');
+    else if (s.provider === 'sap') setAiProviderLabel('SAP AI Core');
+    else setAiProviderLabel('AI Provider');
     fetchPlans();
     fetchSharedPlans();
   }, []);
@@ -198,7 +202,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             {/* Appearance */}
             <div className="profile-group-label">Appearance</div>
             <div className="profile-group">
-              <div className="profile-row no-tap">
+              <div className="profile-row no-tap theme-row">
                 <div className="profile-row-left">
                   <span className="profile-row-icon" style={{ background: '#f59e0b' }}><Sun size={16} /></span>
                   <span className="profile-row-title">Theme</span>
@@ -224,7 +228,9 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                     <Bot size={16} />
                   </span>
                   <div className="profile-row-text">
-                    <span className="profile-row-title">SAP AI Core</span>
+                    <span className="profile-row-title">
+                      {aiConfigured ? aiProviderLabel : 'AI Provider'}
+                    </span>
                     <span className="profile-row-sub">{aiConfigured ? 'Connected' : 'Not configured'}</span>
                   </div>
                 </div>
@@ -452,9 +458,16 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                       >
                         <div className="plan-card-main">
                           <div className="plan-info">
-                            <div className="shared-badge">
-                              <Share2 size={11} />
-                              Shared with you
+                            <div className="shared-badge-row">
+                              <div className="shared-badge">
+                                <Share2 size={11} />
+                                Shared with you
+                              </div>
+                              {(plan as any).userPermission === 'edit' ? (
+                                <span className="shared-perm-badge edit">✏️ Can edit</span>
+                              ) : (
+                                <span className="shared-perm-badge view">👁 View only</span>
+                              )}
                             </div>
                             <h3>{plan.title}</h3>
                             {plan.destination && (
@@ -1108,12 +1121,22 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         .danger-row:hover { background: color-mix(in srgb, #ef4444 8%, var(--card)); }
 
         /* Theme pills (profile) */
-        .theme-pills { display: flex; gap: 6px; flex-shrink: 0; }
+        .profile-row.no-tap.theme-row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
+        }
+        .theme-pills {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+        }
         .theme-pill {
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 5px;
-          padding: 6px 10px;
+          padding: 8px 10px;
           border: 1.5px solid var(--border);
           border-radius: 8px;
           background: var(--background);
@@ -1217,6 +1240,14 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         }
 
         /* Shared badge on plan card */
+        .shared-badge-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 6px;
+          flex-wrap: wrap;
+        }
+
         .shared-badge {
           display: inline-flex;
           align-items: center;
@@ -1227,7 +1258,26 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           background: color-mix(in srgb, var(--primary) 10%, transparent);
           border-radius: 6px;
           padding: 2px 7px;
-          margin-bottom: 6px;
+        }
+
+        .shared-perm-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 6px;
+          border-radius: 6px;
+        }
+
+        .shared-perm-badge.view {
+          background: color-mix(in srgb, #6366f1 12%, transparent);
+          color: #6366f1;
+        }
+
+        .shared-perm-badge.edit {
+          background: color-mix(in srgb, #f59e0b 12%, transparent);
+          color: #d97706;
         }
 
         .shared-card {

@@ -38,6 +38,7 @@ model Plan {
 
   days DayPlan[]
   sharedAccess SharedAccess[]
+  shareLinks   ShareLink[]
 
   @@index([createdBy])
   @@index([shareLink])
@@ -91,14 +92,33 @@ model Activity {
 }
 
 model SharedAccess {
-  id         String   @id @default(cuid())
-  userId     String
-  planId     String
-  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  accessedAt DateTime @default(now())
+  id          String     @id @default(cuid())
+  userId      String
+  userEmail   String     @default("")
+  userName    String     @default("")
+  planId      String
+  permission  String     @default("view")
+  linkId      String?
+  plan        Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  shareLink   ShareLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  accessedAt  DateTime   @default(now())
 
   @@unique([userId, planId])
   @@index([userId])
+}
+
+model ShareLink {
+  id         String         @id @default(cuid())
+  planId     String
+  token      String         @unique
+  permission String
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  plan       Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  members    SharedAccess[]
+
+  @@index([token])
+  @@index([planId])
 }
 
 model Task {

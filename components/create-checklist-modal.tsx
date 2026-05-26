@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AIChecklistGenerationResult } from '@/lib/types';
-import { loadAISettings } from '@/lib/ai-settings';
+import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import {
   Plus, X, Sparkles, LayoutTemplate, PenLine, Check,
   Search, ArrowLeft,
@@ -128,8 +128,8 @@ export default function CreateChecklistModal({
   const handleGenerate = async () => {
     if (!aiPrompt.trim()) return;
     const settings = loadAISettings();
-    if (!settings?.clientId) {
-      setAiError('AI is not configured. Go to Settings → Intelligence to set up SAP AI Core.');
+    if (!isAIConfigured(settings)) {
+      setAiError('AI is not configured. Go to Settings → Intelligence to set up your AI provider.');
       return;
     }
     setIsGenerating(true); setAiError('');

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ models });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('SAP AI Core model discovery error:', message);
+    console.error('AI model discovery error:', message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     }
   } else {
     if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
-      return NextResponse.json({ error: 'SAP AI Core is not fully configured' }, { status: 400 });
+      return NextResponse.json({ error: 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.' }, { status: 400 });
     }
   }
 

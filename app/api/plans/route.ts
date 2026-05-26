@@ -89,28 +89,68 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const planId = searchParams.get('id');
-    const shareLink = searchParams.get('share');
+    const shareToken = searchParams.get('share');
     const tab = searchParams.get('tab');
 
-    // Public share — no auth required, but record access if the user is logged in
-    if (shareLink) {
+    // Share link branch — no auth required for view
+    if (shareToken) {
+      // Try new ShareLink table first
+      const shareLink = await prisma.shareLink.findUnique({
+        where: { token: shareToken },
+        include: { plan: { include: { days: { include: DAY_INCLUDE } } } },
+      });
+
+      if (shareLink && shareLink.isActive && shareLink.plan) {
+        const session = await auth();
+        const isOwner = session?.user?.id === shareLink.plan.createdBy;
+        // Unauthenticated or owner → view only via link; authenticated non-owner → record access
+        let userPermission: 'view' | 'edit' = 'view';
+        if (session?.user?.id && !isOwner) {
+          userPermission = shareLink.permission as 'view' | 'edit';
+          await prisma.sharedAccess.upsert({
+            where: { userId_planId: { userId: session.user.id, planId: shareLink.planId } },
+            update: { accessedAt: new Date(), permission: userPermission, linkId: shareLink.id,
+              userEmail: session.user.email ?? '', userName: session.user.name ?? '' },
+            create: {
+              id: generateId(),
+              userId: session.user.id,
+              userEmail: session.user.email ?? '',
+              userName: session.user.name ?? '',
+              planId: shareLink.planId,
+              permission: userPermission,
+              linkId: shareLink.id,
+            },
+          });
+        }
+        return NextResponse.json({
+          plan: shapePlan(shareLink.plan),
+          userPermission: session?.user?.id ? (isOwner ? 'owner' : userPermission) : 'view',
+        });
+      }
+
+      // Backward compat: fall back to Plan.shareLink
       const plan = await prisma.plan.findUnique({
-        where: { shareLink },
+        where: { shareLink: shareToken },
         include: { days: { include: DAY_INCLUDE } },
       });
       if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-      // Record that this authenticated user accessed the plan (best-effort)
       const session = await auth();
       if (session?.user?.id && session.user.id !== plan.createdBy) {
         await prisma.sharedAccess.upsert({
           where: { userId_planId: { userId: session.user.id, planId: plan.id } },
           update: { accessedAt: new Date() },
-          create: { id: generateId(), userId: session.user.id, planId: plan.id },
+          create: {
+            id: generateId(),
+            userId: session.user.id,
+            userEmail: session.user.email ?? '',
+            userName: session.user.name ?? '',
+            planId: plan.id,
+            permission: 'view',
+          },
         });
       }
-
-      return NextResponse.json({ plan: shapePlan(plan) });
+      return NextResponse.json({ plan: shapePlan(plan), userPermission: 'view' });
     }
 
     const session = await auth();
@@ -120,25 +160,53 @@ export async function GET(request: Request) {
     const userId = session.user.id;
 
     if (planId) {
-      const plan = await prisma.plan.findFirst({
-        where: {
-          id: planId,
-          OR: [{ createdBy: userId }, { isPublic: true }],
-        },
+      // Check ownership first
+      let plan = await prisma.plan.findFirst({
+        where: { id: planId, createdBy: userId },
         include: { days: { include: DAY_INCLUDE } },
       });
-      if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
-      return NextResponse.json({ plan: shapePlan(plan) });
+      if (plan) {
+        return NextResponse.json({ plan: shapePlan(plan), userPermission: 'owner' });
+      }
+
+      // Check shared access with active link
+      const access = await prisma.sharedAccess.findUnique({
+        where: { userId_planId: { userId, planId } },
+        include: { shareLink: true },
+      });
+      if (access && access.shareLink?.isActive) {
+        plan = await prisma.plan.findFirst({
+          where: { id: planId },
+          include: { days: { include: DAY_INCLUDE } },
+        });
+        if (plan) {
+          return NextResponse.json({ plan: shapePlan(plan), userPermission: access.permission });
+        }
+      }
+
+      // Fallback: public plan (backward compat)
+      plan = await prisma.plan.findFirst({
+        where: { id: planId, isPublic: true },
+        include: { days: { include: DAY_INCLUDE } },
+      });
+      if (plan) {
+        return NextResponse.json({ plan: shapePlan(plan), userPermission: 'view' });
+      }
+
+      return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
     }
 
-    // Shared-with-me tab — plans this user accessed via share links
+    // Shared-with-me tab
     if (tab === 'shared') {
       const accesses = await prisma.sharedAccess.findMany({
-        where: { userId },
+        where: { userId, shareLink: { isActive: true } },
         include: { plan: { include: { days: { include: DAY_INCLUDE } } } },
         orderBy: { accessedAt: 'desc' },
       });
-      const plans = accesses.map((a: { plan: any }) => shapePlan(a.plan));
+      const plans = accesses.map((a: any) => ({
+        ...shapePlan(a.plan),
+        userPermission: a.permission,
+      }));
       return NextResponse.json({ plans });
     }
 
@@ -316,7 +384,7 @@ export async function PUT(request: Request) {
   }
 }
 
-// PATCH — generate (or return existing) share link for a plan
+// PATCH — generate (or return existing) share link for a plan (backward compat)
 export async function PATCH(request: Request) {
   try {
     const session = await auth();
@@ -333,15 +401,26 @@ export async function PATCH(request: Request) {
     });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    // Reuse existing share link or generate a new one
-    const shareLink = plan.shareLink ?? generateId();
-
-    await prisma.plan.update({
-      where: { id },
-      data: { shareLink, isPublic: true },
+    // Ensure a view ShareLink exists
+    const existingLink = await prisma.shareLink.findFirst({
+      where: { planId: id, permission: 'view', isActive: true },
     });
+    const token = existingLink?.token ?? (() => {
+      const t = generateId();
+      return t;
+    })();
 
-    return NextResponse.json({ shareLink });
+    if (!existingLink) {
+      await prisma.shareLink.create({
+        data: { id: generateId(), planId: id, token, permission: 'view', isActive: true },
+      });
+    }
+
+    // Keep Plan.shareLink in sync for backward compat
+    const shareLink = plan.shareLink ?? token;
+    await prisma.plan.update({ where: { id }, data: { shareLink, isPublic: true } });
+
+    return NextResponse.json({ shareLink: token });
   } catch (error) {
     console.error('Error generating share link:', error);
     return NextResponse.json({ error: 'Failed to generate share link' }, { status: 500 });

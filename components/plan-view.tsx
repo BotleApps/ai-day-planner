@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plan, DayPlan, Activity, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
 import { formatDate, calculateDayProgress, formatDuration } from '@/lib/utils';
-import Timeline from '@/components/timeline';
+import Timeline, { ActivityDetailPopup } from '@/components/timeline';
 import AIPanel from '@/components/ai-panel';
 import ActivityModal from '@/components/activity-modal';
 import ConfirmDialog from '@/components/confirm-dialog';
@@ -45,7 +45,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [userPermission, setUserPermission] = useState<'owner' | 'edit' | 'view'>('owner');
 
   // View mode: 'timeline' | 'text' — persisted in localStorage
   const [viewMode, setViewMode] = useState<'timeline' | 'text'>(() => {
@@ -54,12 +54,9 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     }
     return 'timeline';
   });
-  const [showViewPopover, setShowViewPopover] = useState(false);
-
   const switchViewMode = (mode: 'timeline' | 'text') => {
     setViewMode(mode);
     if (typeof window !== 'undefined') localStorage.setItem('planViewMode', mode);
-    setShowViewPopover(false);
   };
 
   // Day notes
@@ -82,8 +79,11 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [editPlanSaving, setEditPlanSaving] = useState(false);
 
   const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const daysScrollRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
+  const [isDetailPopupOpen, setIsDetailPopupOpen] = useState(false);
+  const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
 
   // Fetch plan
   const fetchPlan = useCallback(async () => {
@@ -95,6 +95,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
       const data = await res.json();
       if (data.plan) {
         setPlan(data.plan);
+        if (data.userPermission) setUserPermission(data.userPermission);
         if (!selectedDayId && data.plan.days.length > 0) {
           // Select today's day or first day
           const today = new Date().toISOString().split('T')[0];
@@ -126,6 +127,19 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     }
   }, [plan]);
 
+  // Auto-scroll day strip to keep selected pill centered
+  useEffect(() => {
+    if (!daysScrollRef.current || !plan) return;
+    const container = daysScrollRef.current;
+    const index = plan.days.findIndex(d => d.id === selectedDayId);
+    const pill = container.children[index] as HTMLElement | undefined;
+    if (!pill) return;
+    const containerW = container.offsetWidth;
+    const pillLeft = pill.offsetLeft;
+    const pillW = pill.offsetWidth;
+    container.scrollTo({ left: pillLeft - (containerW - pillW) / 2, behavior: 'smooth' });
+  }, [selectedDayId, plan]);
+
   const selectedDay = plan?.days.find(d => d.id === selectedDayId);
   const selectedDayIndex = plan?.days.findIndex(d => d.id === selectedDayId) ?? 0;
 
@@ -148,47 +162,71 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     setShowActivityModal(true);
   }, []);
 
-  // Handle share — generate a persistent share link then copy it
-  const [shareUrl, setShareUrl] = useState<string>('');
-  const [shareGenerating, setShareGenerating] = useState(false);
+  // Share modal state — new two-link system
+  const [shareLinks, setShareLinks] = useState<Array<{id: string; token: string; permission: string; isActive: boolean}>>([]);
+  const [shareMembers, setShareMembers] = useState<Array<{id: string; userId: string; userEmail: string; userName: string; permission: string}>>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareLinkGenerating, setShareLinkGenerating] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState<string | null>(null);
 
   const openShareModal = async () => {
     setShowShareModal(true);
-    setShareGenerating(true);
+    if (!plan) return;
+    setShareLoading(true);
     try {
-      const res = await fetch('/api/plans', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: plan!._id }),
-      });
+      const res = await fetch(`/api/plans/members?planId=${plan._id}`);
       const data = await res.json();
-      if (data.shareLink) {
-        const base = typeof window !== 'undefined' ? window.location.origin : '';
-        setShareUrl(`${base}/?share=${data.shareLink}`);
-      }
-    } catch {
-      setShareUrl(typeof window !== 'undefined' ? window.location.href : '');
-    } finally {
-      setShareGenerating(false);
-    }
+      setShareLinks(data.shareLinks ?? []);
+      setShareMembers(data.members ?? []);
+    } catch { /* ignore */ }
+    finally { setShareLoading(false); }
   };
 
-  const handleShare = async () => {
-    if (!shareUrl) return;
+  const handleGenerateLink = async (permission: 'view' | 'edit') => {
+    if (!plan) return;
+    setShareLinkGenerating(permission);
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      const input = document.createElement('input');
-      input.value = shareUrl;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+      const res = await fetch('/api/plans/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: plan._id, permission }),
+      });
+      const data = await res.json();
+      if (data.link) {
+        setShareLinks(prev => {
+          const filtered = prev.filter(l => !(l.permission === permission && l.isActive));
+          return [...filtered, data.link];
+        });
+      }
+    } catch { /* ignore */ }
+    finally { setShareLinkGenerating(null); }
+  };
+
+  const handleRevokeLink = async (linkId: string) => {
+    try {
+      await fetch(`/api/plans/share?linkId=${linkId}`, { method: 'DELETE' });
+      setShareLinks(prev => prev.map(l => l.id === linkId ? { ...l, isActive: false } : l));
+      setShareMembers(prev => prev.filter(m => {
+        const link = shareLinks.find(l => l.id === linkId);
+        return !link || m.permission !== link.permission;
+      }));
+    } catch { /* ignore */ }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    if (!plan) return;
+    try {
+      await fetch(`/api/plans/members?planId=${plan._id}&memberId=${memberId}`, { method: 'DELETE' });
+      setShareMembers(prev => prev.filter(m => m.id !== memberId));
+    } catch { /* ignore */ }
+  };
+
+  const copyLink = async (url: string, linkId: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(linkId);
+      setTimeout(() => setShareCopied(null), 2000);
+    } catch { /* ignore */ }
   };
 
   // Save activity
@@ -425,6 +463,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
 
   const progress = selectedDay ? calculateDayProgress(selectedDay) : { total: 0, completed: 0, percentage: 0 };
   const today = new Date().toISOString().split('T')[0];
+  const isEditable = userPermission !== 'view';
 
   return (
     <div className="plan-view">
@@ -447,33 +486,15 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
           </div>
 
           <div className="header-actions">
-            {/* View mode toggle — single button with popover */}
-            <div className="view-toggle-wrap" onClick={e => e.stopPropagation()}>
+            {/* View mode toggle — single tap to switch */}
+            <div className="view-toggle-wrap">
               <button
-                className={`btn-icon ${showViewPopover ? 'active' : ''}`}
-                onClick={() => setShowViewPopover(v => !v)}
-                title="Switch view"
+                className="btn-icon"
+                onClick={() => switchViewMode(viewMode === 'timeline' ? 'text' : 'timeline')}
+                title={viewMode === 'timeline' ? 'Switch to List view' : 'Switch to Timeline view'}
               >
-                {viewMode === 'timeline' ? <LayoutList size={17} /> : <AlignLeft size={17} />}
+                {viewMode === 'timeline' ? <AlignLeft size={17} /> : <LayoutList size={17} />}
               </button>
-              {showViewPopover && (
-                <div className="view-popover">
-                  <button
-                    className={`view-popover-item ${viewMode === 'timeline' ? 'active-item' : ''}`}
-                    onClick={() => switchViewMode('timeline')}
-                  >
-                    <LayoutList size={15} />
-                    Timeline
-                  </button>
-                  <button
-                    className={`view-popover-item ${viewMode === 'text' ? 'active-item' : ''}`}
-                    onClick={() => switchViewMode('text')}
-                  >
-                    <AlignLeft size={15} />
-                    List
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Desktop: individual buttons */}
@@ -485,9 +506,11 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
               >
                 <StickyNote size={17} />
               </button>
-              <button className="btn-icon" title="Share" onClick={openShareModal}>
-                <Share2 size={17} />
-              </button>
+              {userPermission === 'owner' && (
+                <button className="btn-icon" title="Share" onClick={openShareModal}>
+                  <Share2 size={17} />
+                </button>
+              )}
               <button className="btn-icon" title="Settings" onClick={() => setShowSettingsModal(true)}>
                 <Settings size={17} />
               </button>
@@ -511,20 +534,24 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                     <StickyNote size={16} />
                     Day Notes
                   </button>
-                  <button
-                    className="more-menu-item"
-                    onClick={() => { openShareModal(); setShowMoreMenu(false); }}
-                  >
-                    <Share2 size={16} />
-                    Share
-                  </button>
-                  <button
-                    className="more-menu-item"
-                    onClick={openEditPlanModal}
-                  >
-                    <Edit2 size={16} />
-                    Edit Plan
-                  </button>
+                  {userPermission === 'owner' && (
+                    <button
+                      className="more-menu-item"
+                      onClick={() => { openShareModal(); setShowMoreMenu(false); }}
+                    >
+                      <Share2 size={16} />
+                      Share
+                    </button>
+                  )}
+                  {isEditable && (
+                    <button
+                      className="more-menu-item"
+                      onClick={openEditPlanModal}
+                    >
+                      <Edit2 size={16} />
+                      Edit Plan
+                    </button>
+                  )}
                   <button
                     className="more-menu-item"
                     onClick={() => { setShowSettingsModal(true); setShowMoreMenu(false); }}
@@ -556,7 +583,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
             <ChevronLeft size={18} />
           </button>
 
-          <div className="days-scroll">
+          <div className="days-scroll" ref={daysScrollRef}>
             {plan.days.map((day) => {
               const isSelected = day.id === selectedDayId;
               const isToday = day.date === today;
@@ -660,7 +687,8 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
             onActivityReorder={handleActivityReorder}
             onAddActivity={handleAddActivity}
             onEditActivity={handleEditActivity}
-            isEditable={true}
+            onPopupOpenChange={setIsDetailPopupOpen}
+            isEditable={isEditable}
           />
         )}
 
@@ -692,7 +720,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                       return `${String(Math.floor(total / 60) % 24).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
                     })();
                     return (
-                      <div key={activity.id} className="text-activity">
+                      <div key={activity.id} className="text-activity" onClick={() => setViewingActivity(activity)} style={{ cursor: 'pointer' }}>
                         <div
                           className="text-activity-bar"
                           style={{ background: ACTIVITY_COLORS[activity.type] }}
@@ -727,23 +755,27 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         )}
       </div>
 
-      {/* Floating Add Button */}
-      <button 
-        className="fab-add"
-        onClick={() => handleAddActivity('09:00')}
-        title="Add Activity"
-      >
-        <Plus size={24} />
-      </button>
+      {/* Floating Add Button — hidden when popup open or view-only */}
+      {!isDetailPopupOpen && isEditable && (
+        <button
+          className="fab-add"
+          onClick={() => handleAddActivity('09:00')}
+          title="Add Activity"
+        >
+          <Plus size={24} />
+        </button>
+      )}
 
-      {/* Floating AI Button */}
-      <button 
-        className="fab-ai"
-        onClick={() => setShowAIPanel(true)}
-        title="AI Assistant"
-      >
-        <Sparkles size={22} />
-      </button>
+      {/* Floating AI Button — hidden when popup open or view-only */}
+      {!isDetailPopupOpen && isEditable && (
+        <button
+          className="fab-ai"
+          onClick={() => setShowAIPanel(true)}
+          title="AI Assistant"
+        >
+          <Sparkles size={22} />
+        </button>
+      )}
 
       {/* AI Panel Modal */}
       {showAIPanel && selectedDay && (
@@ -801,38 +833,109 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
               </button>
             </div>
             <div className="modal-body">
-              <p className="share-description">Share this plan with friends and family</p>
-              
-              <div className="share-link-box">
-                <Link2 size={18} />
-                <input
-                  type="text"
-                  readOnly
-                  value={shareGenerating ? 'Generating link…' : shareUrl}
-                />
-                <button className="copy-btn" onClick={handleShare} disabled={shareGenerating || !shareUrl}>
-                  {copied ? <Check size={18} /> : <Copy size={18} />}
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
+              {shareLoading ? (
+                <div className="share-loading">Loading…</div>
+              ) : (
+                <>
+                  {/* View link */}
+                  {(() => {
+                    const viewLink = shareLinks.find(l => l.permission === 'view' && l.isActive);
+                    const viewUrl = viewLink ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?share=${viewLink.token}` : '';
+                    return (
+                      <div className="share-section">
+                        <div className="share-section-title">
+                          <span className="share-perm-badge view">👁 View only</span>
+                          <span className="share-section-hint">Recipients can view but not edit</span>
+                        </div>
+                        {viewLink ? (
+                          <div className="share-link-row">
+                            <div className="share-link-url">{viewUrl}</div>
+                            <button className="share-action-btn copy" onClick={() => copyLink(viewUrl, viewLink.id)}>
+                              {shareCopied === viewLink.id ? <Check size={14} /> : <Copy size={14} />}
+                              {shareCopied === viewLink.id ? 'Copied' : 'Copy'}
+                            </button>
+                            <button className="share-action-btn revoke" onClick={() => handleRevokeLink(viewLink.id)}>
+                              Revoke
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="share-generate-btn"
+                            onClick={() => handleGenerateLink('view')}
+                            disabled={shareLinkGenerating === 'view'}
+                          >
+                            <Link2 size={14} />
+                            {shareLinkGenerating === 'view' ? 'Generating…' : 'Generate view link'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-              <div className="share-options">
-                <p className="share-label">Or share via</p>
-                <div className="share-buttons">
-                  <button
-                    className="share-option"
-                    onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Check out my plan: ${plan.title}\n${shareUrl}`)}`, '_blank')}
-                  >
-                    WhatsApp
-                  </button>
-                  <button
-                    className="share-option"
-                    onClick={() => window.open(`mailto:?subject=${encodeURIComponent(`Plan: ${plan.title}`)}&body=${encodeURIComponent(`Check out my plan: ${shareUrl}`)}`, '_blank')}
-                  >
-                    Email
-                  </button>
-                </div>
-              </div>
+                  {/* Edit link */}
+                  {(() => {
+                    const editLink = shareLinks.find(l => l.permission === 'edit' && l.isActive);
+                    const editUrl = editLink ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?share=${editLink.token}` : '';
+                    return (
+                      <div className="share-section">
+                        <div className="share-section-title">
+                          <span className="share-perm-badge edit">✏️ Can edit</span>
+                          <span className="share-section-hint">Recipients can view and make changes</span>
+                        </div>
+                        {editLink ? (
+                          <div className="share-link-row">
+                            <div className="share-link-url">{editUrl}</div>
+                            <button className="share-action-btn copy" onClick={() => copyLink(editUrl, editLink.id)}>
+                              {shareCopied === editLink.id ? <Check size={14} /> : <Copy size={14} />}
+                              {shareCopied === editLink.id ? 'Copied' : 'Copy'}
+                            </button>
+                            <button className="share-action-btn revoke" onClick={() => handleRevokeLink(editLink.id)}>
+                              Revoke
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="share-generate-btn"
+                            onClick={() => handleGenerateLink('edit')}
+                            disabled={shareLinkGenerating === 'edit'}
+                          >
+                            <Link2 size={14} />
+                            {shareLinkGenerating === 'edit' ? 'Generating…' : 'Generate edit link'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Members list */}
+                  {shareMembers.length > 0 && (
+                    <div className="share-members">
+                      <p className="share-members-title">People with access ({shareMembers.length})</p>
+                      {shareMembers.map(member => (
+                        <div key={member.id} className="share-member-row">
+                          <div className="share-member-avatar">
+                            {(member.userName || member.userEmail || '?')[0].toUpperCase()}
+                          </div>
+                          <div className="share-member-info">
+                            {member.userName && <span className="share-member-name">{member.userName}</span>}
+                            <span className="share-member-email">{member.userEmail || member.userId}</span>
+                          </div>
+                          <span className={`share-perm-badge ${member.permission}`}>
+                            {member.permission === 'edit' ? '✏️ Edit' : '👁 View'}
+                          </span>
+                          <button
+                            className="share-remove-btn"
+                            onClick={() => handleRemoveMember(member.id)}
+                            title="Remove access"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -946,6 +1049,26 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         onConfirm={handleDeletePlan}
         onCancel={() => setShowDeleteConfirm(false)}
       />
+
+      {/* Activity detail popup — for list-view clicks */}
+      {viewingActivity && (
+        <ActivityDetailPopup
+          activity={viewingActivity}
+          onClose={() => setViewingActivity(null)}
+          onStatusChange={(status) => {
+            handleActivityUpdate({ ...viewingActivity, status });
+            setViewingActivity(null);
+          }}
+          onEdit={() => {
+            handleEditActivity(viewingActivity);
+            setViewingActivity(null);
+          }}
+          onDelete={() => {
+            handleActivityDelete(viewingActivity.id);
+            setViewingActivity(null);
+          }}
+        />
+      )}
 
       <style jsx>{`
         .plan-view {
@@ -1661,85 +1784,190 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         }
 
         /* Share Modal */
-        .share-description {
-          margin: 0 0 16px 0;
+        .share-loading {
+          text-align: center;
           color: var(--muted-foreground);
+          padding: 24px 0;
           font-size: 14px;
         }
 
-        .share-link-box {
+        .share-section {
+          margin-bottom: 20px;
+          padding-bottom: 20px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .share-section:last-of-type { border-bottom: none; margin-bottom: 0; }
+
+        .share-section-title {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 12px;
-          background: var(--muted);
-          border-radius: 12px;
-          margin-bottom: 20px;
+          gap: 8px;
+          margin-bottom: 10px;
+          flex-wrap: wrap;
         }
 
-        .share-link-box :global(svg) {
+        .share-perm-badge {
+          font-size: 12px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 20px;
+        }
+
+        .share-perm-badge.view {
+          background: color-mix(in srgb, #6366f1 12%, transparent);
+          color: #6366f1;
+        }
+
+        .share-perm-badge.edit {
+          background: color-mix(in srgb, #f59e0b 12%, transparent);
+          color: #d97706;
+        }
+
+        .share-section-hint {
+          font-size: 12px;
           color: var(--muted-foreground);
-          flex-shrink: 0;
         }
 
-        .share-link-box input {
-          flex: 1;
-          background: none;
-          border: none;
-          font-size: 13px;
-          color: var(--foreground);
-          min-width: 0;
-        }
-
-        .share-link-box input:focus {
-          outline: none;
-        }
-
-        .copy-btn {
+        .share-link-row {
           display: flex;
           align-items: center;
           gap: 6px;
-          padding: 8px 12px;
-          background: var(--primary);
-          color: white;
+          background: var(--muted);
+          border-radius: 10px;
+          padding: 8px 10px;
+        }
+
+        .share-link-url {
+          flex: 1;
+          font-size: 12px;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+        }
+
+        .share-action-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 5px 10px;
           border: none;
-          border-radius: 8px;
-          font-size: 13px;
+          border-radius: 7px;
+          font-size: 12px;
           font-weight: 500;
           cursor: pointer;
           white-space: nowrap;
+          flex-shrink: 0;
         }
 
-        .copy-btn:hover {
-          opacity: 0.9;
+        .share-action-btn.copy {
+          background: var(--primary);
+          color: white;
         }
 
-        .share-label {
-          margin: 0 0 12px 0;
+        .share-action-btn.revoke {
+          background: color-mix(in srgb, #ef4444 12%, transparent);
+          color: #dc2626;
+        }
+
+        .share-generate-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 9px 14px;
+          background: var(--muted);
+          border: 1px dashed var(--border);
+          border-radius: 10px;
           font-size: 13px;
           color: var(--muted-foreground);
+          cursor: pointer;
+          width: 100%;
+          justify-content: center;
+          transition: all 0.15s;
         }
 
-        .share-buttons {
+        .share-generate-btn:hover { background: var(--border); color: var(--foreground); }
+        .share-generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .share-members { margin-top: 16px; }
+
+        .share-members-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          margin: 0 0 10px;
+        }
+
+        .share-member-row {
           display: flex;
+          align-items: center;
           gap: 10px;
+          padding: 8px 0;
+          border-bottom: 1px solid var(--border);
         }
 
-        .share-option {
+        .share-member-row:last-child { border-bottom: none; }
+
+        .share-member-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: color-mix(in srgb, var(--primary) 20%, transparent);
+          color: var(--primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .share-member-info {
           flex: 1;
-          padding: 12px;
-          background: var(--muted);
-          border: none;
-          border-radius: 12px;
-          font-size: 14px;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+        }
+
+        .share-member-name {
+          font-size: 13px;
           font-weight: 500;
           color: var(--foreground);
-          cursor: pointer;
-          transition: background 0.2s;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .share-option:hover {
-          background: var(--border);
+        .share-member-email {
+          font-size: 11px;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .share-remove-btn {
+          width: 28px;
+          height: 28px;
+          border-radius: 7px;
+          border: none;
+          background: none;
+          color: var(--muted-foreground);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .share-remove-btn:hover {
+          background: color-mix(in srgb, #ef4444 12%, transparent);
+          color: #dc2626;
         }
 
         /* Settings Modal */

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChecklistTemplate, ChecklistTemplateCategory, AIChecklistGenerationResult } from '@/lib/types';
-import { loadAISettings } from '@/lib/ai-settings';
+import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import { Search, X, Sparkles, LayoutTemplate } from 'lucide-react';
 
 const CATEGORIES: { value: ChecklistTemplateCategory | 'all'; label: string }[] = [
@@ -203,8 +203,8 @@ export function AIChecklistModal({ isOpen, onClose, onGenerated }: AIChecklistMo
   const handleGenerate = async () => {
     if (!description.trim()) return;
     const settings = loadAISettings();
-    if (!settings?.clientId) {
-      setError('AI is not configured. Go to Settings → Intelligence to set up SAP AI Core.');
+    if (!isAIConfigured(settings)) {
+      setError('AI is not configured. Go to Settings → Intelligence to set up your AI provider.');
       return;
     }
     setIsGenerating(true);

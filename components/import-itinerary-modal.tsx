@@ -193,7 +193,7 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
               <AlertCircle size={20} />
               <div>
                 <strong>AI not configured</strong>
-                <p>Go to Settings → Intelligence to connect SAP AI Core first.</p>
+                <p>Go to Settings → Intelligence to connect your AI provider first.</p>
               </div>
             </div>
           )}
@@ -267,7 +267,7 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
                 <Loader2 size={32} className="spin" />
               </div>
               <p className="parsing-title">Analysing your itinerary…</p>
-              <p className="parsing-desc">SAP AI Core is reading and structuring your trip. This takes 10–30 seconds.</p>
+              <p className="parsing-desc">AI is reading and structuring your trip. This takes 10–30 seconds.</p>
             </div>
           )}
 

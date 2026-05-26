@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     }
   } else {
     if (!settings?.clientId || !settings?.deploymentId) {
-      return NextResponse.json({ error: 'SAP AI Core is not configured' }, { status: 400 });
+      return NextResponse.json({ error: 'AI provider is not configured' }, { status: 400 });
     }
   }
 
