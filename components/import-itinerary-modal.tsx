@@ -32,11 +32,12 @@ interface ImportItineraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPlanCreated: (planId: string) => void;
+  mode?: 'import' | 'generate';
 }
 
 type Stage = 'input' | 'extracting' | 'parsing' | 'preview' | 'creating' | 'error';
 
-export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportItineraryModalProps) {
+export function ImportItineraryModal({ isOpen, onClose, onPlanCreated, mode = 'import' }: ImportItineraryModalProps) {
   const [stage, setStage] = useState<Stage>('input');
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState<ParsedPreview | null>(null);
@@ -175,8 +176,8 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
               <Sparkles size={18} />
             </div>
             <div>
-              <h2>Import Itinerary</h2>
-              <p>Paste your trip description and AI will build the plan</p>
+              <h2>{mode === 'generate' ? 'AI Plan Generator' : 'Import Itinerary'}</h2>
+              <p>{mode === 'generate' ? 'Describe your trip and AI will build a complete plan' : 'Paste your trip description and AI will build the plan'}</p>
             </div>
           </div>
           <button className="close-btn" onClick={handleClose}>
@@ -202,6 +203,7 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
           {(stage === 'input' || stage === 'error') && (
             <>
               <div className="input-area">
+                {mode !== 'generate' && (
                 <div className="input-toolbar">
                   <span className="input-label">
                     <FileText size={14} />
@@ -225,11 +227,14 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated }: ImportI
                     </label>
                   </div>
                 </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={text}
                   onChange={e => { setText(e.target.value); if (stage === 'error') setStage('input'); }}
-                  placeholder={`Paste your full trip itinerary here — including dates, destinations, activities, hotels, and any details you have.
+                  placeholder={mode === 'generate'
+                    ? `Describe what you want, e.g. "A 3-day beach trip to Bali with morning yoga, afternoon sightseeing, and sunset cocktail dinners. Keep it relaxed and budget-friendly."`
+                    : `Paste your full trip itinerary here — including dates, destinations, activities, hotels, and any details you have.
 
 Example:
 Day 1 - April 4, Ha Noi

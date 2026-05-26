@@ -34,6 +34,11 @@ import {
   LogOut,
   ChevronRight,
   CheckCircle2,
+  PenLine,
+  Sparkles,
+  LayoutTemplate,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react';
 import { ChecklistList } from './checklist-list';
 import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
@@ -65,13 +70,18 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
   const [section, setSection] = useState<'plans' | 'checklists' | 'profile'>('plans');
   const [tab, setTab] = useState<'mine' | 'shared'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [menuPlanId, setMenuPlanId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [importMode, setImportMode] = useState<'import' | 'generate'>('import');
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [aiProviderLabel, setAiProviderLabel] = useState('AI Provider');
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [planFilter, setPlanFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [planSort, setPlanSort] = useState<'newest' | 'oldest' | 'az' | 'activities'>('newest');
+  const [showPlanFilter, setShowPlanFilter] = useState(false);
+  const [showPlanSort, setShowPlanSort] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -118,10 +128,29 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
     setMenuPlanId(null);
   };
 
-  const filteredPlans = plans.filter(plan => 
-    plan.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    plan.destination?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const processPlanList = (list: Plan[]) => {
+    let result = list.filter(plan =>
+      plan.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      plan.destination?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    if (planFilter === 'upcoming') result = result.filter(p => p.endDate >= today);
+    else if (planFilter === 'past') result = result.filter(p => p.endDate < today);
+    result = [...result].sort((a, b) => {
+      if (planSort === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (planSort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (planSort === 'az') return a.title.localeCompare(b.title);
+      if (planSort === 'activities') return (
+        b.days.reduce((s, d) => s + d.activities.length, 0) -
+        a.days.reduce((s, d) => s + d.activities.length, 0)
+      );
+      return 0;
+    });
+    return result;
+  };
+
+  const filteredPlans = processPlanList(plans);
+  const filteredSharedPlans = processPlanList(sharedPlans);
 
   const getPlanProgress = (plan: Plan) => {
     const total = plan.days.reduce((sum, day) => sum + day.activities.length, 0);
@@ -132,11 +161,6 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
   const hasPlans = plans.length > 0;
   const hasAnyPlans = hasPlans || sharedPlans.length > 0;
-
-  const filteredSharedPlans = sharedPlans.filter(plan =>
-    plan.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    plan.destination?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="home-container">
@@ -153,31 +177,68 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             </span>
           </div>
           <div className="header-actions">
-            {section === 'plans' && hasAnyPlans && (
-              <button className="icon-btn" onClick={() => setShowSearch(!showSearch)}>
-                <Search size={20} />
-              </button>
+            {(section === 'plans' || section === 'checklists') && (
+              <div className="create-menu-wrap">
+                <button className="icon-btn plus-btn" onClick={() => setShowCreateMenu(m => !m)}>
+                  <Plus size={20} />
+                </button>
+                {showCreateMenu && (
+                  <div className="create-menu">
+                    {section === 'plans' ? (
+                      <>
+                        <button className="create-opt" onClick={() => { onCreatePlan(); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon manual"><PenLine size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>Create manually</span>
+                            <span className="create-opt-sub">Build your plan step by step</span>
+                          </div>
+                        </button>
+                        <button className="create-opt" onClick={() => { setImportMode('generate'); setShowImport(true); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon ai"><Sparkles size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>AI Generate</span>
+                            <span className="create-opt-sub">Describe your trip, AI builds it</span>
+                          </div>
+                        </button>
+                        <button className="create-opt" onClick={() => { setImportMode('import'); setShowImport(true); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon import-icon"><FileText size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>Import itinerary</span>
+                            <span className="create-opt-sub">Paste text or upload a file</span>
+                          </div>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="create-opt" onClick={() => { onCreateChecklist('manual'); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon manual"><PenLine size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>Create manually</span>
+                            <span className="create-opt-sub">Add items yourself</span>
+                          </div>
+                        </button>
+                        <button className="create-opt" onClick={() => { onCreateChecklist('ai'); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon ai"><Sparkles size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>AI Generate</span>
+                            <span className="create-opt-sub">Describe and AI fills it</span>
+                          </div>
+                        </button>
+                        <button className="create-opt" onClick={() => { onCreateChecklist('template'); setShowCreateMenu(false); }}>
+                          <span className="create-opt-icon template-icon"><LayoutTemplate size={15} /></span>
+                          <div className="create-opt-text">
+                            <span>From template</span>
+                            <span className="create-opt-sub">Start from a community template</span>
+                          </div>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
-
-        {showSearch && section === 'plans' && (
-          <div className="search-bar">
-            <Search size={18} />
-            <input
-              type="text"
-              placeholder="Search plans..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              autoFocus
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')}>
-                <X size={16} />
-              </button>
-            )}
-          </div>
-        )}
       </header>
 
       {/* Section Toggle — REMOVED, replaced by bottom nav */}
@@ -279,7 +340,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                 <Plus size={22} />
                 Create Your First Plan
               </button>
-              <button className="import-btn large" onClick={() => setShowImport(true)}>
+              <button className="import-btn large" onClick={() => { setImportMode('import'); setShowImport(true); }}>
                 <FileText size={18} />
                 Import Itinerary
               </button>
@@ -305,6 +366,70 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         ) : (
           /* Plans List with Tabs */
           <div className="plans-view">
+            {/* Search / Filter / Sort toolbar */}
+            <div className="list-toolbar">
+              <div className="search-field">
+                <Search size={15} className="sf-icon" />
+                <input
+                  type="text"
+                  placeholder={tab === 'shared' ? 'Search shared plans...' : 'Search plans...'}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button className="sf-clear" onClick={() => setSearchQuery('')}><X size={13} /></button>
+                )}
+              </div>
+              <div className="toolbar-btns">
+                <div className="tb-wrap">
+                  <button
+                    className={`tb-btn${planFilter !== 'all' ? ' tb-active' : ''}`}
+                    title="Filter"
+                    onClick={() => { setShowPlanFilter(f => !f); setShowPlanSort(false); }}
+                  >
+                    <Filter size={15} />
+                  </button>
+                  {showPlanFilter && (
+                    <div className="tb-dropdown">
+                      <p className="tb-dd-title">Filter</p>
+                      {(['all', 'upcoming', 'past'] as const).map(f => (
+                        <button
+                          key={f}
+                          className={`tb-dd-opt${planFilter === f ? ' selected' : ''}`}
+                          onClick={() => { setPlanFilter(f); setShowPlanFilter(false); }}
+                        >
+                          {f === 'all' ? 'All plans' : f === 'upcoming' ? 'Upcoming' : 'Past'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="tb-wrap">
+                  <button
+                    className={`tb-btn${planSort !== 'newest' ? ' tb-active' : ''}`}
+                    title="Sort"
+                    onClick={() => { setShowPlanSort(s => !s); setShowPlanFilter(false); }}
+                  >
+                    <ArrowUpDown size={15} />
+                  </button>
+                  {showPlanSort && (
+                    <div className="tb-dropdown">
+                      <p className="tb-dd-title">Sort by</p>
+                      {(['newest', 'oldest', 'az', 'activities'] as const).map(s => (
+                        <button
+                          key={s}
+                          className={`tb-dd-opt${planSort === s ? ' selected' : ''}`}
+                          onClick={() => { setPlanSort(s); setShowPlanSort(false); }}
+                        >
+                          {s === 'newest' ? 'Newest first' : s === 'oldest' ? 'Oldest first' : s === 'az' ? 'A → Z' : 'Most activities'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Tab bar */}
             <div className="tabs-bar">
               <button
@@ -326,19 +451,6 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
             {tab === 'mine' ? (
               <>
-                <div className="plans-header">
-                  <div className="plans-header-actions">
-                    <button className="primary-btn compact" onClick={onCreatePlan}>
-                      <Plus size={18} />
-                      <span>New</span>
-                    </button>
-                    <button className="import-btn" onClick={() => setShowImport(true)}>
-                      <FileText size={16} />
-                      <span>Import</span>
-                    </button>
-                  </div>
-                </div>
-
                 {filteredPlans.length === 0 && searchQuery ? (
                   <div className="no-results">
                     <p>No plans match &ldquo;{searchQuery}&rdquo;</p>
@@ -463,7 +575,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
                                 <Share2 size={11} />
                                 Shared with you
                               </div>
-                              {(plan as any).userPermission === 'edit' ? (
+                              {(plan as Plan & { userPermission?: string }).userPermission === 'edit' ? (
                                 <span className="shared-perm-badge edit">✏️ Can edit</span>
                               ) : (
                                 <span className="shared-perm-badge view">👁 View only</span>
@@ -507,9 +619,10 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         )}
       </main>
 
-      {/* Import Itinerary Modal */}
+      {/* Import / AI Generate Modal */}
       <ImportItineraryModal
         isOpen={showImport}
+        mode={importMode}
         onClose={() => setShowImport(false)}
         onPlanCreated={(planId) => {
           setShowImport(false);
@@ -529,11 +642,19 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         onCancel={() => setDeletePlanId(null)}
       />
 
-      {/* Click outside to close menu */}
+      {/* Click outside to close plan card menu */}
       {menuPlanId && (
         <div
           className="menu-overlay"
           onClick={() => setMenuPlanId(null)}
+        />
+      )}
+
+      {/* Backdrop to close create menu / filter / sort dropdowns */}
+      {(showCreateMenu || showPlanFilter || showPlanSort) && (
+        <div
+          className="global-overlay"
+          onClick={() => { setShowCreateMenu(false); setShowPlanFilter(false); setShowPlanSort(false); }}
         />
       )}
 
@@ -626,6 +747,122 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           background: var(--muted);
           color: var(--foreground);
         }
+        .plus-btn {
+          background: var(--primary, #6366f1);
+          color: white;
+          border-color: var(--primary, #6366f1);
+        }
+        .plus-btn:hover {
+          opacity: 0.9;
+          background: var(--primary, #6366f1);
+          color: white;
+          transform: none;
+        }
+
+        /* Create menu */
+        .create-menu-wrap { position: relative; }
+        .create-menu {
+          position: absolute;
+          right: 0;
+          top: calc(100% + 8px);
+          z-index: 200;
+          min-width: 248px;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+          overflow: hidden;
+        }
+        .create-opt {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          padding: 13px 16px;
+          border: none;
+          background: none;
+          cursor: pointer;
+          text-align: left;
+          transition: background 0.12s;
+          border-bottom: 1px solid var(--border);
+        }
+        .create-opt:last-child { border-bottom: none; }
+        .create-opt:hover { background: var(--muted); }
+        .create-opt-icon {
+          width: 34px; height: 34px;
+          border-radius: 9px;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
+        }
+        .create-opt-icon.manual { background: #ede9fe; color: #7c3aed; }
+        .create-opt-icon.ai { background: linear-gradient(135deg,#ede9fe,#ddd6fe); color: #7c3aed; }
+        .create-opt-icon.import-icon { background: #e0f2fe; color: #0284c7; }
+        .create-opt-icon.template-icon { background: #ecfdf5; color: #059669; }
+        .create-opt-text {
+          display: flex; flex-direction: column; gap: 1px;
+        }
+        .create-opt-text > span:first-child { font-size: 14px; font-weight: 500; color: var(--foreground); }
+        .create-opt-sub { font-size: 12px; color: var(--muted-foreground); }
+
+        /* List toolbar */
+        .list-toolbar {
+          display: flex; align-items: center; gap: 8px;
+          padding: 12px 0 8px;
+        }
+        .search-field {
+          flex: 1; display: flex; align-items: center; gap: 8px;
+          background: var(--muted); border-radius: 10px;
+          padding: 8px 12px;
+        }
+        .sf-icon { color: var(--muted-foreground); flex-shrink: 0; }
+        .search-field input {
+          flex: 1; border: none; background: none;
+          font-size: 14px; color: var(--foreground); outline: none;
+        }
+        .sf-clear {
+          padding: 2px; border: none; background: none;
+          color: var(--muted-foreground); cursor: pointer; line-height: 1;
+        }
+        .toolbar-btns { display: flex; gap: 4px; }
+        .tb-wrap { position: relative; }
+        .tb-btn {
+          width: 36px; height: 36px;
+          display: flex; align-items: center; justify-content: center;
+          border: 1px solid var(--border); border-radius: 8px;
+          background: var(--background); color: var(--muted-foreground);
+          cursor: pointer; transition: all 0.15s;
+        }
+        .tb-btn:hover { background: var(--muted); color: var(--foreground); }
+        .tb-btn.tb-active {
+          background: color-mix(in srgb, var(--primary, #6366f1) 12%, transparent);
+          border-color: var(--primary, #6366f1);
+          color: var(--primary, #6366f1);
+        }
+        .tb-dropdown {
+          position: absolute; right: 0; top: calc(100% + 6px); z-index: 201;
+          min-width: 160px; background: var(--card);
+          border: 1px solid var(--border); border-radius: 12px;
+          box-shadow: 0 6px 24px rgba(0,0,0,0.1); overflow: hidden;
+        }
+        .tb-dd-title {
+          font-size: 11px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.06em; color: var(--muted-foreground);
+          padding: 10px 14px 6px; margin: 0;
+        }
+        .tb-dd-opt {
+          display: block; width: 100%; padding: 9px 14px;
+          border: none; background: none; text-align: left;
+          font-size: 13px; color: var(--foreground); cursor: pointer;
+          transition: background 0.1s;
+        }
+        .tb-dd-opt:hover { background: var(--muted); }
+        .tb-dd-opt.selected {
+          color: var(--primary, #6366f1); font-weight: 600;
+          background: color-mix(in srgb, var(--primary, #6366f1) 8%, transparent);
+        }
+
+        /* Overlay to close popups */
+        .global-overlay { position: fixed; inset: 0; z-index: 199; }
 
         .user-menu {
           display: flex;
@@ -653,41 +890,6 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           font-size: 13px;
           font-weight: 700;
           flex-shrink: 0;
-        }
-
-        .search-bar {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 16px;
-          margin: 0 16px 12px;
-          background: var(--muted);
-          border-radius: 12px;
-          max-width: 568px;
-          margin-left: auto;
-          margin-right: auto;
-        }
-
-        .search-bar :global(svg) {
-          color: var(--muted-foreground);
-          flex-shrink: 0;
-        }
-
-        .search-bar input {
-          flex: 1;
-          border: none;
-          background: none;
-          font-size: 16px; /* Prevents iOS auto-zoom */
-          color: var(--foreground);
-          outline: none;
-        }
-
-        .search-bar button {
-          padding: 4px;
-          border: none;
-          background: none;
-          color: var(--muted-foreground);
-          cursor: pointer;
         }
 
         /* Main Content */
@@ -1201,19 +1403,6 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           color: var(--primary);
         }
 
-        .plans-header {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          padding: 12px 16px;
-          gap: 8px;
-        }
-
-        .plans-header-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
 
         /* Tab empty state */
         .tab-empty {
@@ -1544,10 +1733,6 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             font-size: 13px;
           }
 
-          .plans-header {
-            padding: 10px 12px;
-          }
-
           .primary-btn.compact,
           .import-btn:not(.large) {
             padding: 9px 12px;
@@ -1589,24 +1774,8 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
             gap: 4px;
           }
 
-          .plans-header {
-            padding: 8px 10px;
-          }
-
           .plans-list {
             padding: 0 10px 10px;
-          }
-
-          .primary-btn.compact span,
-          .import-btn:not(.large) span {
-            display: none;
-          }
-
-          .primary-btn.compact,
-          .import-btn:not(.large) {
-            padding: 9px;
-            min-width: 36px;
-            border-radius: 10px;
           }
         }
       `}</style>

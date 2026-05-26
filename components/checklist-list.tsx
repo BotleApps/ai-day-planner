@@ -5,7 +5,7 @@ import { Checklist } from '@/lib/types';
 import { ChecklistCard } from './checklist-card';
 import { ConfirmDialog } from './confirm-dialog';
 import { TemplatesSection } from './templates-section';
-import { Plus, CheckSquare, Sparkles, LayoutTemplate, PenLine } from 'lucide-react';
+import { CheckSquare, LayoutTemplate, Share2, Search, X, Filter, ArrowUpDown } from 'lucide-react';
 
 interface ChecklistListProps {
   onSelectChecklist: (id: string) => void;
@@ -21,6 +21,10 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
   const [menuId, setMenuId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [checklistFilter, setChecklistFilter] = useState<'all' | 'in-progress' | 'completed'>('all');
+  const [checklistSort, setChecklistSort] = useState<'newest' | 'oldest' | 'az' | 'items'>('newest');
+  const [showFilter, setShowFilter] = useState(false);
+  const [showSort, setShowSort] = useState(false);
 
   useEffect(() => {
     fetchChecklists();
@@ -57,13 +61,28 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
   };
 
   const handleShare = (id: string) => {
-    // Opening the checklist exposes the full sharing modal (links, members, templates)
     onSelectChecklist(id);
   };
 
-  const filtered = (tab === 'mine' ? checklists : sharedChecklists).filter(c =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const processChecklists = (list: Checklist[]) => {
+    let result = list.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (checklistFilter === 'completed')
+      result = result.filter(c => c.items.length > 0 && c.items.every(i => i.completed));
+    else if (checklistFilter === 'in-progress')
+      result = result.filter(c => c.items.length > 0 && !c.items.every(i => i.completed));
+    result = [...result].sort((a, b) => {
+      if (checklistSort === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (checklistSort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (checklistSort === 'az') return a.title.localeCompare(b.title);
+      if (checklistSort === 'items') return b.items.length - a.items.length;
+      return 0;
+    });
+    return result;
+  };
+
+  const filtered = processChecklists(tab === 'mine' ? checklists : sharedChecklists);
+  const activeList = tab === 'mine' ? checklists : sharedChecklists;
+  const showToolbar = tab !== 'templates' && activeList.length > 0;
 
   if (isLoading) {
     return (
@@ -80,6 +99,72 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
 
   return (
     <div className="checklist-list">
+      {/* Search / Filter / Sort toolbar — shown when list has items */}
+      {showToolbar && (
+        <div className="list-toolbar">
+          <div className="search-field">
+            <Search size={15} className="sf-icon" />
+            <input
+              type="text"
+              placeholder="Search checklists..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="sf-clear" onClick={() => setSearchQuery('')}><X size={13} /></button>
+            )}
+          </div>
+          <div className="toolbar-btns">
+            <div className="tb-wrap">
+              <button
+                className={`tb-btn${checklistFilter !== 'all' ? ' tb-active' : ''}`}
+                title="Filter"
+                onClick={() => { setShowFilter(f => !f); setShowSort(false); }}
+              >
+                <Filter size={15} />
+              </button>
+              {showFilter && (
+                <div className="tb-dropdown">
+                  <p className="tb-dd-title">Filter</p>
+                  {(['all', 'in-progress', 'completed'] as const).map(f => (
+                    <button
+                      key={f}
+                      className={`tb-dd-opt${checklistFilter === f ? ' selected' : ''}`}
+                      onClick={() => { setChecklistFilter(f); setShowFilter(false); }}
+                    >
+                      {f === 'all' ? 'All checklists' : f === 'in-progress' ? 'In progress' : 'Completed'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="tb-wrap">
+              <button
+                className={`tb-btn${checklistSort !== 'newest' ? ' tb-active' : ''}`}
+                title="Sort"
+                onClick={() => { setShowSort(s => !s); setShowFilter(false); }}
+              >
+                <ArrowUpDown size={15} />
+              </button>
+              {showSort && (
+                <div className="tb-dropdown">
+                  <p className="tb-dd-title">Sort by</p>
+                  {(['newest', 'oldest', 'az', 'items'] as const).map(s => (
+                    <button
+                      key={s}
+                      className={`tb-dd-opt${checklistSort === s ? ' selected' : ''}`}
+                      onClick={() => { setChecklistSort(s); setShowSort(false); }}
+                    >
+                      {s === 'newest' ? 'Newest first' : s === 'oldest' ? 'Oldest first' : s === 'az' ? 'A → Z' : 'Most items'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="tabs-bar">
         <button
@@ -93,6 +178,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
           className={`tab-btn${tab === 'shared' ? ' active' : ''}`}
           onClick={() => setTab('shared')}
         >
+          <Share2 size={13} />
           Shared
           {sharedChecklists.length > 0 && <span className="tab-badge">{sharedChecklists.length}</span>}
         </button>
@@ -108,70 +194,41 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
       {/* Templates tab */}
       {tab === 'templates' ? (
         <TemplatesSection onUseTemplate={(id, _title) => onUseTemplate(id)} />
-      ) : (<>
-      {/* Search */}
-      {filtered.length > 2 && (
-        <div className="search-row">
-          <input
-            className="search-input"
-            placeholder="Search checklists..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-        </div>
-      )}
-
-      {/* Content */}
-      {tab === 'mine' && checklists.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon"><CheckSquare size={32} /></div>
-          <h3>No checklists yet</h3>
-          <p>Stay organized with smart checklists</p>
-          <div className="creation-chips">
-            <button className="chip" onClick={() => onCreateChecklist('manual')}>
-              <PenLine size={16} />
-              Manual
-            </button>
-            <button className="chip chip-ai" onClick={() => onCreateChecklist('ai')}>
-              <Sparkles size={16} />
-              AI Generate
-            </button>
-            <button className="chip chip-template" onClick={() => onCreateChecklist('template')}>
-              <LayoutTemplate size={16} />
-              From Template
-            </button>
-          </div>
-        </div>
-      ) : tab === 'shared' && sharedChecklists.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon"><CheckSquare size={32} /></div>
-          <h3>No shared checklists</h3>
-          <p>Checklists shared with you will appear here</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="no-results">No checklists match your search</div>
       ) : (
-        <div className="cards-grid">
-          {filtered.map(checklist => (
-            <ChecklistCard
-              key={checklist.id}
-              checklist={checklist}
-              onOpen={() => onSelectChecklist(checklist.id)}
-              onShare={() => handleShare(checklist.id)}
-              onDelete={() => setDeleteId(checklist.id)}
-              showMenu={menuId === checklist.id}
-              onToggleMenu={() => setMenuId(prev => prev === checklist.id ? null : checklist.id)}
-            />
-          ))}
-          {tab === 'mine' && (
-            <button className="create-card" onClick={() => onCreateChecklist()}>
-              <Plus size={24} />
-              <span>New Checklist</span>
-            </button>
+        <>
+          {/* Content */}
+          {tab === 'mine' && checklists.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon"><CheckSquare size={32} /></div>
+              <h3>No checklists yet</h3>
+              <p>Stay organised with smart checklists</p>
+              <p className="empty-hint">Tap <strong>+</strong> at the top to get started</p>
+            </div>
+          ) : tab === 'shared' && sharedChecklists.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon"><CheckSquare size={32} /></div>
+              <h3>No shared checklists</h3>
+              <p>Checklists shared with you will appear here</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="no-results">No checklists match your search</div>
+          ) : (
+            <div className="cards-grid">
+              {filtered.map(checklist => (
+                <ChecklistCard
+                  key={checklist.id}
+                  checklist={checklist}
+                  onOpen={() => onSelectChecklist(checklist.id)}
+                  onShare={() => handleShare(checklist.id)}
+                  onDelete={() => setDeleteId(checklist.id)}
+                  showMenu={menuId === checklist.id}
+                  onToggleMenu={() => setMenuId(prev => prev === checklist.id ? null : checklist.id)}
+                />
+              ))}
+            </div>
           )}
-        </div>
+        </>
       )}
-      </>)}
 
       <ConfirmDialog
         open={!!deleteId}
@@ -183,8 +240,72 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
         onCancel={() => setDeleteId(null)}
       />
 
+      {/* Backdrop to close filter/sort dropdowns */}
+      {(showFilter || showSort) && (
+        <div className="cl-overlay" onClick={() => { setShowFilter(false); setShowSort(false); }} />
+      )}
+
       <style jsx>{`
-        .checklist-list { padding: 0 0 40px; }
+        .checklist-list { padding: 0 0 40px; position: relative; }
+
+        /* Toolbar */
+        .list-toolbar {
+          display: flex; align-items: center; gap: 8px;
+          padding: 12px 0 8px;
+        }
+        .search-field {
+          flex: 1; display: flex; align-items: center; gap: 8px;
+          background: var(--muted, #f3f4f6); border-radius: 10px;
+          padding: 8px 12px;
+        }
+        .sf-icon { color: var(--muted-foreground, #9ca3af); flex-shrink: 0; }
+        .search-field input {
+          flex: 1; border: none; background: none;
+          font-size: 14px; color: var(--foreground); outline: none;
+        }
+        .sf-clear {
+          padding: 2px; border: none; background: none;
+          color: var(--muted-foreground); cursor: pointer; line-height: 1;
+        }
+        .toolbar-btns { display: flex; gap: 4px; }
+        .tb-wrap { position: relative; }
+        .tb-btn {
+          width: 36px; height: 36px;
+          display: flex; align-items: center; justify-content: center;
+          border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+          background: var(--background, white); color: var(--muted-foreground, #9ca3af);
+          cursor: pointer; transition: all 0.15s;
+        }
+        .tb-btn:hover { background: var(--muted, #f3f4f6); color: var(--foreground); }
+        .tb-btn.tb-active {
+          background: color-mix(in srgb, var(--primary, #6366f1) 12%, transparent);
+          border-color: var(--primary, #6366f1);
+          color: var(--primary, #6366f1);
+        }
+        .tb-dropdown {
+          position: absolute; right: 0; top: calc(100% + 6px); z-index: 201;
+          min-width: 160px; background: var(--card, white);
+          border: 1px solid var(--border, #e5e7eb); border-radius: 12px;
+          box-shadow: 0 6px 24px rgba(0,0,0,0.1); overflow: hidden;
+        }
+        .tb-dd-title {
+          font-size: 11px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.06em; color: var(--muted-foreground, #9ca3af);
+          padding: 10px 14px 6px; margin: 0;
+        }
+        .tb-dd-opt {
+          display: block; width: 100%; padding: 9px 14px;
+          border: none; background: none; text-align: left;
+          font-size: 13px; color: var(--foreground); cursor: pointer;
+          transition: background 0.1s;
+        }
+        .tb-dd-opt:hover { background: var(--muted, #f3f4f6); }
+        .tb-dd-opt.selected {
+          color: var(--primary, #6366f1); font-weight: 600;
+          background: color-mix(in srgb, var(--primary, #6366f1) 8%, transparent);
+        }
+        .cl-overlay { position: fixed; inset: 0; z-index: 199; }
+
         .tabs-bar {
           display: flex;
           border-bottom: 2px solid var(--border, #e5e7eb);
@@ -214,18 +335,6 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
           border-radius: 99px;
           font-weight: 600;
         }
-        .search-row { margin-bottom: 16px; }
-        .search-input {
-          width: 100%;
-          padding: 8px 14px;
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 10px;
-          font-size: 14px;
-          background: var(--background, white);
-          color: var(--foreground);
-          outline: none;
-        }
-        .search-input:focus { border-color: var(--primary, #6366f1); }
         .empty-state {
           text-align: center;
           padding: 60px 20px 40px;
@@ -246,58 +355,12 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
         }
         .empty-state h3 { font-size: 18px; font-weight: 600; color: var(--foreground); margin: 0; }
         .empty-state p { font-size: 14px; color: var(--muted-foreground); margin: 0; }
-        .creation-chips {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          justify-content: center;
-          margin-top: 8px;
-        }
-        .chip {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          border-radius: 99px;
-          border: 1px solid var(--border, #e5e7eb);
-          background: var(--background, white);
-          cursor: pointer;
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--foreground);
-          transition: all 0.15s;
-        }
-        .chip:hover { background: var(--muted, #f3f4f6); }
-        .chip-ai { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-color: #c4b5fd; color: #7c3aed; }
-        .chip-ai:hover { background: linear-gradient(135deg, #ddd6fe, #c4b5fd); }
-        .chip-template { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; color: #059669; }
-        .chip-template:hover { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+        .empty-hint { font-size: 13px; color: var(--muted-foreground); margin-top: 4px !important; }
         .no-results { text-align: center; padding: 40px; color: var(--muted-foreground); font-size: 14px; }
         .cards-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
           gap: 14px;
-        }
-        .create-card {
-          border: 2px dashed var(--border, #e5e7eb);
-          border-radius: 14px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          min-height: 120px;
-          cursor: pointer;
-          background: transparent;
-          color: var(--muted-foreground, #9ca3af);
-          font-size: 14px;
-          font-weight: 500;
-          transition: all 0.15s;
-        }
-        .create-card:hover {
-          border-color: var(--primary, #6366f1);
-          color: var(--primary, #6366f1);
-          background: var(--muted, #f5f3ff);
         }
       `}</style>
     </div>

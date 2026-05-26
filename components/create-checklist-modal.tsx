@@ -140,7 +140,7 @@ export default function CreateChecklistModal({
         body: JSON.stringify({ description: aiPrompt.trim(), settings }),
       });
       const data: AIChecklistGenerationResult & { error?: string } = await res.json();
-      if (data.error) { setAiError(data.error); return; }
+      if (!res.ok || data.error) { setAiError(data.error || 'Failed to generate checklist.'); return; }
       setTitle(data.title || '');
       setPreviewItems(data.groups.flatMap(g => g.items.map(item => ({ title: item, groupName: g.groupName, included: true }))));
       setView('preview');
@@ -155,12 +155,16 @@ export default function CreateChecklistModal({
   const handleTemplateSelect = async (tplId: string, tplTitle: string) => {
     setSelectedTemplateId(tplId);
     setTitle(tplTitle);
-    const res = await fetch(`/api/checklists/templates?id=${tplId}`);
-    const data = await res.json();
-    if (data.template?.items) {
-      setPreviewItems(data.template.items.map((i: { title: string; groupName?: string }) => ({
-        title: i.title, groupName: i.groupName || '', included: true,
-      })));
+    try {
+      const res = await fetch(`/api/checklists/templates?id=${tplId}`);
+      const data = await res.json();
+      if (res.ok && data.template?.items) {
+        setPreviewItems(data.template.items.map((i: { title: string; groupName?: string }) => ({
+          title: i.title, groupName: i.groupName || '', included: true,
+        })));
+      }
+    } catch {
+      // Template fetch failed — proceed to preview with no pre-filled items
     }
     setView('preview');
   };

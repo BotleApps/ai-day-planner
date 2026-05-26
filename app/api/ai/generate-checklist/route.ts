@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
 
   const { description, settings, planContext } = body;
 
-  if (!description || !settings) {
+  if (!description?.trim() || !settings) {
     return NextResponse.json({ error: 'description and settings are required' }, { status: 400 });
   }
 
