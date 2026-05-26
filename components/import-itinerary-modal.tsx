@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   X,
   Sparkles,
@@ -15,7 +15,7 @@ import {
   Upload,
   FileUp,
 } from 'lucide-react';
-import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettings, loadAISettingsFromServer, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
 import { DayPlan, DEFAULT_PREFERENCES } from '@/lib/types';
 import { ACTIVITY_ICONS } from '@/lib/types';
 
@@ -43,11 +43,18 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated, mode = 'i
   const [parsed, setParsed] = useState<ParsedPreview | null>(null);
   const [error, setError] = useState('');
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
+  const [aiConfigured, setAiConfigured] = useState(() => isAIConfigured(loadAISettings()));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    loadAISettingsFromServer().then(serverSettings => {
+      saveAISettings(serverSettings);
+      setAiConfigured(isAIConfigured(serverSettings));
+    });
+  }, [isOpen]);
 
-  const aiConfigured = isAIConfigured(loadAISettings());
+  if (!isOpen) return null;
 
   const handleParse = async () => {
     if (!text.trim()) return;

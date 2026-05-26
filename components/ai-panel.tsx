@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Activity, DayPlan, PlanPreferences, ACTIVITY_ICONS } from '@/lib/types';
 import { generateId, formatDuration } from '@/lib/utils';
-import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettings, loadAISettingsFromServer, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
 import {
   Sparkles,
   Send,
@@ -63,8 +63,12 @@ export function AIPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const settings = loadAISettings();
-    setAiConfigured(isAIConfigured(settings));
+    const local = loadAISettings();
+    setAiConfigured(isAIConfigured(local));
+    loadAISettingsFromServer().then(serverSettings => {
+      saveAISettings(serverSettings);
+      setAiConfigured(isAIConfigured(serverSettings));
+    });
   }, []);
 
   const scrollToBottom = () => {

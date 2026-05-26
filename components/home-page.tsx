@@ -41,7 +41,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { ChecklistList } from './checklist-list';
-import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettings, loadAISettingsFromServer, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
 import { OnboardingModal } from '@/components/onboarding-modal';
 
 interface HomePageProps {
@@ -85,13 +85,21 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
   useEffect(() => {
     setMounted(true);
-    const s = loadAISettings();
-    setAiConfigured(isAIConfigured(s));
-    if (s.provider === 'gemini') setAiProviderLabel('Google Gemini');
-    else if (s.provider === 'sap') setAiProviderLabel('SAP AI Core');
+    // Read localStorage immediately for fast initial render
+    const local = loadAISettings();
+    setAiConfigured(isAIConfigured(local));
+    if (local.provider === 'gemini') setAiProviderLabel('Google Gemini');
+    else if (local.provider === 'sap') setAiProviderLabel('SAP AI Core');
     else setAiProviderLabel('AI Provider');
     fetchPlans();
     fetchSharedPlans();
+    // Then fetch from server to catch settings saved from another device / session
+    loadAISettingsFromServer().then(serverSettings => {
+      saveAISettings(serverSettings); // update localStorage cache
+      setAiConfigured(isAIConfigured(serverSettings));
+      if (serverSettings.provider === 'gemini') setAiProviderLabel('Google Gemini');
+      else if (serverSettings.provider === 'sap') setAiProviderLabel('SAP AI Core');
+    });
   }, []);
 
   const fetchPlans = async () => {
