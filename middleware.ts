@@ -32,6 +32,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // Template detail pages — public so anyone with a shared link can view
+  if (nextUrl.pathname.startsWith('/templates/')) {
+    return NextResponse.next();
+  }
+
   const base = getBaseUrl(req);
 
   // Sign-in page: redirect to home if already logged in

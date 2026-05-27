@@ -406,6 +406,7 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           justify-content: center;
           z-index: 100;
           padding: 20px;
+          touch-action: none;
         }
 
         .modal {
@@ -475,7 +476,9 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
         /* Body */
         .modal-body {
           flex: 1;
-          overflow-y: auto;
+          overflow-y: scroll;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
           padding: 20px 24px;
           position: relative;
         }

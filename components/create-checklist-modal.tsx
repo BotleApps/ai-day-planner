@@ -476,6 +476,7 @@ export default function CreateChecklistModal({
           position: fixed; inset: 0; z-index: 150;
           background: rgba(0,0,0,0.55);
           display: flex; align-items: flex-end;
+          touch-action: none;
         }
         .sheet {
           width: 100%; max-height: 92vh;
@@ -483,6 +484,7 @@ export default function CreateChecklistModal({
           border-radius: 20px 20px 0 0;
           display: flex; flex-direction: column;
           overflow: hidden;
+          touch-action: pan-y;
         }
 
         /* Header */
@@ -501,7 +503,7 @@ export default function CreateChecklistModal({
         .header-spacer { width: 36px; flex-shrink: 0; }
 
         /* Mode picker */
-        .mode-grid { display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow-y: auto; }
+        .mode-grid { display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow-y: scroll; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
         .mode-card {
           display: flex; align-items: center; gap: 14px;
           padding: 16px; border: 1.5px solid var(--border); border-radius: 14px;
@@ -523,8 +525,10 @@ export default function CreateChecklistModal({
 
         /* Form body */
         .form-body {
-          flex: 1; overflow-y: auto; padding: 16px;
+          flex: 1; overflow-y: scroll; padding: 16px;
           display: flex; flex-direction: column; gap: 10px;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
         }
         .field-label { font-size: 13px; font-weight: 600; color: var(--foreground); }
         .field-input {
@@ -578,8 +582,10 @@ export default function CreateChecklistModal({
         }
         .cat-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
         .templates-body {
-          flex: 1; overflow-y: auto; padding: 14px;
+          flex: 1; overflow-y: scroll; padding: 14px;
           display: flex; flex-direction: column; gap: 10px;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
         }
         .skeleton { height: 80px; border-radius: 12px; background: var(--muted); animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }

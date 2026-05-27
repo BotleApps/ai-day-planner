@@ -468,8 +468,9 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
         .step-content {
           padding: 0 16px 16px;
           flex: 1;
-          overflow-y: auto;
+          overflow-y: scroll;
           -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
           min-height: 0;
         }
 
