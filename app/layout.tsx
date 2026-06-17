@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import SessionProvider from "@/components/session-provider";
 import ServiceWorkerRegistration from "@/components/service-worker-registration";
+import NativeBridge from "@/components/native-bridge";
 import { SplashScreen } from "@/components/splash-screen";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { OfflineBanner } from "@/components/offline-banner";
@@ -44,6 +45,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Required for env(safe-area-inset-*) to report real values on notch /
+  // home-indicator devices (iOS standalone PWA + Capacitor native shell).
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#6366f1" },
     { media: "(prefers-color-scheme: dark)", color: "#6366f1" },
@@ -59,6 +63,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ServiceWorkerRegistration />
+        <NativeBridge />
         <SessionProvider>
           <ThemeProvider
             attribute="class"

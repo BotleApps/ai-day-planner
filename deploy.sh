@@ -78,19 +78,26 @@ info "CF Space : $CF_SPACE"
 [ -n "$MTAEXT" ] && info "MTA ext  : $MTAEXT"
 
 # ── 3. Load secrets (.env.<env>.local → .env.local fallback) ─────────────────
+# In CI (GitHub Actions) there is no .env file — secrets are injected straight
+# into the environment. Sourcing a file is therefore optional: if no env file
+# exists we rely on variables already present in the environment.
 ENV_FILE=".env.${ENV}.local"
 if [ -f "$ENV_FILE" ]; then
   log "Loading secrets from $ENV_FILE"
-else
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+elif [ -f ".env.local" ]; then
   ENV_FILE=".env.local"
   warn "No .env.${ENV}.local found — falling back to $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+else
+  warn "No .env file found — using secrets from the environment (CI mode)."
 fi
-[ -f "$ENV_FILE" ] || die "$ENV_FILE not found. Create it with your secrets."
-
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
 
 # ── 4. Validate required secret variables ────────────────────────────────────
 for var in CF_APP_URL CF_DB_SERVICE_NAME \
@@ -119,6 +126,17 @@ fi
 # It exits non-zero when the session has expired or never existed.
 if cf target -o "$CF_ORG" -s "$CF_SPACE" > /dev/null 2>&1; then
   log "Already authenticated — targeting Org=$CF_ORG | Space=$CF_SPACE"
+elif [ -n "$CF_USERNAME" ] && [ -n "$CF_PASSWORD" ]; then
+  # Non-interactive auth for CI (GitHub Actions). Uses a technical/service
+  # user or platform credentials supplied via secrets. CF_ORIGIN lets you
+  # target a specific identity provider when the platform requires one.
+  log "Authenticating non-interactively as '$CF_USERNAME' (CI mode)..."
+  if [ -n "$CF_ORIGIN" ]; then
+    cf auth "$CF_USERNAME" "$CF_PASSWORD" --origin "$CF_ORIGIN"
+  else
+    cf auth "$CF_USERNAME" "$CF_PASSWORD"
+  fi
+  cf target -o "$CF_ORG" -s "$CF_SPACE"
 else
   warn "No valid CF session found. Starting SSO login..."
   [ -n "$CF_SSO_URL" ] && info "SSO URL: $CF_SSO_URL"

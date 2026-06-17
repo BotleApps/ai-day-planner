@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { LandingPage } from '@/components/landing-page';
+import { MobileWelcome } from '@/components/mobile-welcome';
+import { useIsNative } from '@/lib/use-is-native';
 import HomePage from '@/components/home-page';
 import PlanView from '@/components/plan-view';
 import ChecklistDetail from '@/components/checklist-detail';
@@ -12,6 +14,10 @@ import CreateChecklistModal from '@/components/create-checklist-modal';
 
 function HomeContent() {
   const { status } = useSession();
+  const isNative = useIsNative();
+  // Logged-out entry screen: native gets the app intro/onboarding + login,
+  // the browser gets the marketing landing page.
+  const welcome = isNative ? <MobileWelcome /> : <LandingPage />;
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -78,7 +84,7 @@ function HomeContent() {
 
   if (selectedPlanId || shareToken) {
     // Share links work without auth
-    if (status === 'unauthenticated' && !shareToken) return <LandingPage />;
+    if (status === 'unauthenticated' && !shareToken) return welcome;
     return (
       <PlanView
         planId={selectedPlanId ?? ''}
@@ -89,7 +95,7 @@ function HomeContent() {
   }
 
   if (selectedChecklistId || checklistShareToken) {
-    if (status === 'unauthenticated' && !checklistShareToken) return <LandingPage />;
+    if (status === 'unauthenticated' && !checklistShareToken) return welcome;
     return (
       <ChecklistDetail
         checklistId={selectedChecklistId ?? undefined}
@@ -99,9 +105,9 @@ function HomeContent() {
     );
   }
 
-  // Show landing page when not authenticated
+  // Show the appropriate logged-out entry screen (web landing vs native intro)
   if (status === 'loading') return null;
-  if (status === 'unauthenticated') return <LandingPage />;
+  if (status === 'unauthenticated') return welcome;
 
   return (
     <>

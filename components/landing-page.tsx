@@ -13,7 +13,10 @@ import {
 } from 'lucide-react';
 
 export function LandingPage() {
-  const startSignIn = () => signIn('google', { callbackUrl: '/' });
+  const startSignIn = () => {
+    const callbackUrl = typeof window !== 'undefined' ? window.location.href : '/';
+    signIn('google', { callbackUrl });
+  };
 
   return (
     <div className="landing">

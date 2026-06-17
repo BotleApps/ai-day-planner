@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Day Planner · Dev Console</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #2a3242;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #4f8cff;
+    --green: #2ea043;
+    --yellow: #d29922;
+    --red: #f85149;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 22px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #131a26, var(--bg));
+    position: sticky; top: 0; z-index: 5;
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: var(--mono); }
+  .wrap { padding: 22px 28px 60px; max-width: 1200px; margin: 0 auto; }
+  .group { margin-bottom: 30px; }
+  .group h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin: 0 0 12px; font-weight: 600;
+  }
+  .grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex; flex-direction: column;
+    transition: border-color .15s, transform .15s;
+  }
+  .card:hover { border-color: #3a4660; transform: translateY(-1px); }
+  .card.danger { border-color: #5a2228; }
+  .card.danger:hover { border-color: var(--red); }
+  .card .top { display: flex; align-items: center; gap: 10px; }
+  .card .icon { font-size: 20px; }
+  .card .title { font-weight: 600; font-size: 15px; }
+  .card .desc { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 10px 0 12px; flex: 1; }
+  .card code {
+    font-family: var(--mono); font-size: 11.5px; color: #9ecbff;
+    background: #0d1117; border: 1px solid var(--border);
+    padding: 6px 8px; border-radius: 7px; display: block; margin-bottom: 12px;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .actions { display: flex; gap: 8px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); padding: 7px 12px; font-size: 13px; font-weight: 500;
+    transition: background .15s, border-color .15s; flex: 1;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  button:hover { background: #232b3b; border-color: #3a4660; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #3f7af0; }
+  button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+  button.danger:hover { background: #e03b32; }
+  .badge {
+    font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+    background: #1f2937; color: var(--muted); border: 1px solid var(--border);
+    margin-left: auto;
+  }
+  .badge.int { color: #e3b341; border-color: #4a3d1a; background: #241f10; }
+
+  /* Console drawer */
+  #drawer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 0; background: #0a0d13; border-top: 1px solid var(--border);
+    transition: height .2s ease; z-index: 20; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  #drawer.open { height: 45vh; }
+  .drawer-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  .drawer-bar .dt { font-weight: 600; font-size: 13px; }
+  .drawer-bar .status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .drawer-bar .spacer { flex: 1; }
+  .drawer-bar button { flex: none; padding: 5px 12px; }
+  #term {
+    flex: 1; overflow-y: auto; padding: 14px 16px; margin: 0;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+    color: #cdd9e5; white-space: pre-wrap; word-break: break-word;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.run { background: var(--yellow); animation: pulse 1.2s infinite; }
+  .dot.ok { background: var(--green); }
+  .dot.err { background: var(--red); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .hint { color: var(--muted); font-size: 12.5px; margin: -6px 0 22px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗓️ AI Day Planner · Dev Console</h1>
+  <div class="sub" id="rootpath">—</div>
+</header>
+<div class="wrap">
+  <p class="hint">
+    <b>Open in Terminal</b> launches the command in a real terminal window — use it for anything interactive
+    (MongoDB prompt, SSO login, live servers, Ctrl+C). <b>Run here</b> streams output live in the panel below —
+    great for quick checks like build, lint and type-check.
+  </p>
+  <div id="groups"></div>
+</div>
+
+<div id="drawer">
+  <div class="drawer-bar">
+    <span class="dot" id="dot"></span>
+    <span class="dt" id="drawerTitle">Output</span>
+    <span class="status" id="drawerStatus"></span>
+    <span class="spacer"></span>
+    <button id="stopBtn">Stop</button>
+    <button id="clearBtn">Clear</button>
+    <button id="closeBtn">Close</button>
+  </div>
+  <pre id="term"></pre>
+</div>
+
+<script>
+let currentJob = null;
+let currentSse = null;
+
+async function load() {
+  const r = await fetch('/api/commands');
+  const data = await r.json();
+  document.getElementById('rootpath').textContent = data.root;
+  const groups = {};
+  for (const c of data.commands) (groups[c.group] ||= []).push(c);
+
+  const container = document.getElementById('groups');
+  for (const [name, cmds] of Object.entries(groups)) {
+    const sec = document.createElement('section');
+    sec.className = 'group';
+    sec.innerHTML = `<h2>${name}</h2>`;
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    for (const c of cmds) grid.appendChild(card(c));
+    sec.appendChild(grid);
+    container.appendChild(sec);
+  }
+}
+
+function card(c) {
+  const el = document.createElement('div');
+  el.className = 'card' + (c.danger ? ' danger' : '');
+  el.innerHTML = `
+    <div class="top">
+      <span class="icon">${c.icon}</span>
+      <span class="title">${c.title}</span>
+      ${c.interactive ? '<span class="badge int">interactive</span>' : '<span class="badge">task</span>'}
+    </div>
+    <div class="desc">${escapeHtml(c.desc)}</div>
+    <code>${escapeHtml(c.cmd)}</code>
+    <div class="actions"></div>`;
+  const actions = el.querySelector('.actions');
+
+  const termBtn = document.createElement('button');
+  termBtn.className = c.danger ? 'danger' : 'primary';
+  termBtn.innerHTML = '▶ Open in Terminal';
+  termBtn.onclick = () => launch(c);
+  actions.appendChild(termBtn);
+
+  const runBtn = document.createElement('button');
+  runBtn.innerHTML = 'Run here';
+  runBtn.title = c.interactive ? 'This command is interactive — Terminal is recommended.' : 'Stream output in the panel below';
+  runBtn.onclick = () => runHere(c);
+  actions.appendChild(runBtn);
+
+  return el;
+}
+
+async function launch(c) {
+  if (c.confirm && !confirm(c.confirm)) return;
+  const r = await fetch('/api/launch', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: c.id }),
+  });
+  const res = await r.json();
+  if (!res.ok) alert(res.error || 'Could not open a terminal.');
+}
+
+async function runHere(c) {
+  if (c.confirm && !confirm(c.confirm)) return;
+  if (c.interactive && !confirm('This command is interactive and may wait for input you cannot provide here.\n\nRun it in this panel anyway? (Cancel to use Terminal instead.)')) return;
+
+  // tear down any previous stream
+  if (currentSse) { currentSse.close(); currentSse = null; }
+
+  openDrawer(c.title);
+  setStatus('starting…', 'run');
+  document.getElementById('term').textContent = '';
+
+  const r = await fetch('/api/run', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: c.id }),
+  });
+  const { jobId, error } = await r.json();
+  if (error) { setStatus(error, 'err'); return; }
+  currentJob = jobId;
+
+  const term = document.getElementById('term');
+  const sse = new EventSource('/api/stream?job=' + jobId);
+  currentSse = sse;
+  setStatus('running…', 'run');
+  sse.addEventListener('output', (e) => {
+    const atBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 40;
+    term.textContent += e.data + '\n';
+    if (atBottom) term.scrollTop = term.scrollHeight;
+  });
+  sse.addEventListener('exit', (e) => {
+    const code = Number(e.data);
+    setStatus(code === 0 ? 'finished ✓ (exit 0)' : 'exited with code ' + code, code === 0 ? 'ok' : 'err');
+    sse.close(); currentSse = null; currentJob = null;
+  });
+  sse.onerror = () => { /* keep panel; stream closed */ };
+}
+
+function openDrawer(title) {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerTitle').textContent = title;
+}
+function setStatus(text, kind) {
+  document.getElementById('drawerStatus').textContent = text;
+  const dot = document.getElementById('dot');
+  dot.className = 'dot ' + (kind || '');
+}
+
+document.getElementById('stopBtn').onclick = async () => {
+  if (!currentJob) return;
+  await fetch('/api/stop', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job: currentJob }),
+  });
+  setStatus('stopping…', 'err');
+};
+document.getElementById('clearBtn').onclick = () => { document.getElementById('term').textContent = ''; };
+document.getElementById('closeBtn').onclick = () => {
+  if (currentSse) { currentSse.close(); currentSse = null; }
+  document.getElementById('drawer').classList.remove('open');
+};
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+load();
+</script>
+</body>
+</html>

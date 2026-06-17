@@ -1,0 +1,103 @@
+name: Build Android
+
+# Builds (and signs) the Capacitor Android app bundle.
+# The native `android/` project is generated on the fly with `cap add` so it
+# does not need to be committed. The app is a thin shell that loads the web app
+# from CAP_SERVER_URL, so a build is only needed when native code/config or the
+# server URL changes.
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: Web app URL the shell loads (overrides CAP_SERVER_URL secret)
+        required: false
+  push:
+    tags:
+      - 'android-v*'
+      - 'v*'
+
+jobs:
+  android:
+    name: Build Android AAB
+    runs-on: ubuntu-latest
+    env:
+      # The deployed web app the native shell points at.
+      CAP_SERVER_URL: ${{ github.event.inputs.server_url || secrets.CAP_SERVER_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Add Android platform (if missing)
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Sync web assets & native config
+        run: npx cap sync android
+
+      - name: Build release bundle (AAB)
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease --no-daemon
+
+      - name: Sign AAB (upload key)
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No signing secrets set — uploading the UNSIGNED bundle."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.keystore"
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          # Play App Signing accepts an upload key (jarsigner) signed AAB.
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore "$RUNNER_TEMP/upload.keystore" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            "$AAB" "$KEY_ALIAS"
+          jarsigner -verify "$AAB"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      # Optional: publish to Google Play. Requires a service-account JSON secret
+      # and the app already created on the Play Console. Uncomment to enable.
+      # - name: Upload to Google Play (internal track)
+      #   if: steps.sign.outputs.signed == 'true'
+      #   uses: r0adkll/upload-google-play@v1
+      #   with:
+      #     serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      #     packageName: com.sortedplan.app
+      #     releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+      #     track: internal

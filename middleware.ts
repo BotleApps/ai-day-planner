@@ -1,5 +1,10 @@
-import { auth } from '@/auth';
+import NextAuth from 'next-auth';
+import { authConfig } from '@/auth.config';
 import { NextResponse } from 'next/server';
+
+// Use the edge-safe config in middleware (no Node-only deps like
+// google-auth-library, which only lives in the full `auth.ts`).
+const { auth } = NextAuth(authConfig);
 
 /** Build a base URL that respects reverse-proxy headers (CF GoRouter, etc.) */
 function getBaseUrl(req: { headers: Headers; nextUrl: URL }): URL {
@@ -39,15 +44,18 @@ export default auth((req) => {
 
   const base = getBaseUrl(req);
 
-  // Sign-in page: redirect to home if already logged in
+  // Sign-in page: redirect logged-in users to callbackUrl (or home)
   if (nextUrl.pathname === '/sign-in') {
     if (isLoggedIn) {
-      return NextResponse.redirect(new URL('/', base));
+      const callbackUrl = nextUrl.searchParams.get('callbackUrl') ?? '/';
+      return NextResponse.redirect(new URL(callbackUrl, base));
     }
     return NextResponse.next();
   }
 
-  // Protect all other routes — send to landing page (not /sign-in)
+  // Protect all other routes — send to landing page where user can sign in.
+  // We redirect to '/' rather than '/sign-in' to avoid redirect loops, since
+  // the session JWT may not be readable by middleware in all edge cases.
   if (!isLoggedIn) {
     return NextResponse.redirect(new URL('/', base));
   }

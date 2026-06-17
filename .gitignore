@@ -40,3 +40,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# capacitor / native build artifacts
+# Keep the ios/ and android/ project folders, ignore generated build output.
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/DerivedData/
+/ios/App/App/public/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/src/main/assets/public/
+/android/capacitor-cordova-android-plugins/
+/mobile/www/cordova*.js
