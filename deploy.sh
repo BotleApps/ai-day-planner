@@ -53,24 +53,30 @@ command -v cf >/dev/null 2>&1 || die "CF CLI not found — https://github.com/cl
 log "CF CLI: $(cf version | head -1)"
 
 # ── 2. Load cf-environments.conf ─────────────────────────────────────────────
+# CF routing (API / Org / Space) can come from EITHER:
+#   (a) environment variables CF_API / CF_ORG / CF_SPACE  — preferred for CI, or
+#   (b) cf-environments.conf via the <ENV>_CF_* keys      — convenient locally.
+# Environment variables always win. The conf file is optional when (a) is used.
 CONF_FILE="cf-environments.conf"
-[ -f "$CONF_FILE" ] || die "$CONF_FILE not found. Run from the project root."
+if [ -f "$CONF_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONF_FILE"
+  set +a
+else
+  warn "$CONF_FILE not found — relying on CF_API / CF_ORG / CF_SPACE from the environment."
+fi
 
-set -a
-# shellcheck disable=SC1090
-source "$CONF_FILE"
-set +a
+# Resolve env-specific CF variables: explicit env vars override conf lookups.
+CF_API_VAR="${ENV_UPPER}_CF_API";    CF_API="${CF_API:-${!CF_API_VAR:-}}"
+CF_ORG_VAR="${ENV_UPPER}_CF_ORG";    CF_ORG="${CF_ORG:-${!CF_ORG_VAR:-}}"
+CF_SPACE_VAR="${ENV_UPPER}_CF_SPACE"; CF_SPACE="${CF_SPACE:-${!CF_SPACE_VAR:-}}"
+MTAEXT_VAR="${ENV_UPPER}_MTAEXT";    MTAEXT="${MTAEXT:-${!MTAEXT_VAR:-}}"
+CF_SSO_URL_VAR="${ENV_UPPER}_CF_SSO_URL"; CF_SSO_URL="${CF_SSO_URL:-${!CF_SSO_URL_VAR:-}}"
 
-# Resolve env-specific CF variables using indirect reference
-CF_API_VAR="${ENV_UPPER}_CF_API";    CF_API="${!CF_API_VAR:-}"
-CF_ORG_VAR="${ENV_UPPER}_CF_ORG";    CF_ORG="${!CF_ORG_VAR:-}"
-CF_SPACE_VAR="${ENV_UPPER}_CF_SPACE"; CF_SPACE="${!CF_SPACE_VAR:-}"
-MTAEXT_VAR="${ENV_UPPER}_MTAEXT";    MTAEXT="${!MTAEXT_VAR:-}"
-CF_SSO_URL_VAR="${ENV_UPPER}_CF_SSO_URL"; CF_SSO_URL="${!CF_SSO_URL_VAR:-}"
-
-[ -n "$CF_API"   ] || die "$CF_API_VAR   is not set in $CONF_FILE"
-[ -n "$CF_ORG"   ] || die "$CF_ORG_VAR   is not set in $CONF_FILE"
-[ -n "$CF_SPACE" ] || die "$CF_SPACE_VAR is not set in $CONF_FILE"
+[ -n "$CF_API"   ] || die "CF_API   is not set (env CF_API or ${CF_API_VAR} in $CONF_FILE)"
+[ -n "$CF_ORG"   ] || die "CF_ORG   is not set (env CF_ORG or ${CF_ORG_VAR} in $CONF_FILE)"
+[ -n "$CF_SPACE" ] || die "CF_SPACE is not set (env CF_SPACE or ${CF_SPACE_VAR} in $CONF_FILE)"
 
 info "CF API   : $CF_API"
 info "CF Org   : $CF_ORG"
@@ -111,6 +117,12 @@ log "DB svc   : $CF_DB_SERVICE_NAME"
 
 # ── 5. Authenticate with CF ───────────────────────────────────────────────────
 banner "CF Authentication"
+
+# CI credentials are optional (local runs use an existing session or SSO).
+# Default them so `set -u` doesn't trip when they're absent.
+CF_USERNAME="${CF_USERNAME:-}"
+CF_PASSWORD="${CF_PASSWORD:-}"
+CF_ORIGIN="${CF_ORIGIN:-}"
 
 # Only call `cf api` when the endpoint actually needs to change.
 # Calling it unconditionally resets the session even when already logged in.

@@ -32,6 +32,8 @@
     "cap:android": "cap sync android && cap open android",
     "cap:run:ios": "cap run ios",
     "cap:run:android": "cap run android",
+    "mobile:ios": "./scripts/run-mobile.sh ios",
+    "mobile:android": "./scripts/run-mobile.sh android",
     "cap:add:ios": "cap add ios",
     "cap:add:android": "cap add android"
   },

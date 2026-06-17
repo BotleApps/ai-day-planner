@@ -26,6 +26,12 @@ jobs:
     environment: ${{ github.event.inputs.environment || 'dev' }}
     env:
       TARGET_ENV: ${{ github.event.inputs.environment || 'dev' }}
+      # ── CF target (API endpoint, org, space) ──
+      # Provide these as secrets/vars so the pipeline is fully env-driven and
+      # doesn't depend on values committed in cf-environments.conf.
+      CF_API: ${{ secrets.CF_API }}
+      CF_ORG: ${{ secrets.CF_ORG }}
+      CF_SPACE: ${{ secrets.CF_SPACE }}
       # ── CF authentication (non-interactive) ──
       CF_USERNAME: ${{ secrets.CF_USERNAME }}
       CF_PASSWORD: ${{ secrets.CF_PASSWORD }}

@@ -62,9 +62,16 @@
   .card code {
     font-family: var(--mono); font-size: 11.5px; color: #9ecbff;
     background: #0d1117; border: 1px solid var(--border);
-    padding: 6px 8px; border-radius: 7px; display: block; margin-bottom: 12px;
-    overflow-x: auto; white-space: nowrap;
+    padding: 6px 8px; border-radius: 7px; display: flex; align-items: center;
+    margin-bottom: 12px; overflow-x: auto; white-space: nowrap; cursor: copy;
+    position: relative;
   }
+  .code-inner { flex: 1; }
+  .code-icon {
+    margin-left: 8px; flex-shrink: 0; color: var(--muted);
+    font-size: 12px; opacity: .6; transition: opacity .15s;
+  }
+  .card code:hover .code-icon { opacity: 1; }
   .actions { display: flex; gap: 8px; }
   button {
     font: inherit; cursor: pointer; border-radius: 8px;
@@ -78,6 +85,17 @@
   button.primary:hover { background: #3f7af0; }
   button.danger { background: var(--red); border-color: var(--red); color: #fff; }
   button.danger:hover { background: #e03b32; }
+  button.copy { flex: 0 0 auto; min-width: 88px; }
+  button.copy.copied { background: #14361f; border-color: var(--green); color: #7ee2a0; }
+  #toast {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translateX(-50%) translateY(12px);
+    background: #1c2230; color: var(--text); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: 10px; font-size: 13px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4); opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s; z-index: 50;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .badge {
     font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
     background: #1f2937; color: var(--muted); border: 1px solid var(--border);
@@ -176,7 +194,10 @@ function card(c) {
       ${c.interactive ? '<span class="badge int">interactive</span>' : '<span class="badge">task</span>'}
     </div>
     <div class="desc">${escapeHtml(c.desc)}</div>
-    <code>${escapeHtml(c.cmd)}</code>
+    <code>
+      <span class="code-inner">${escapeHtml(c.cmd)}</span>
+      <span class="code-icon" title="Click to copy">📋</span>
+    </code>
     <div class="actions"></div>`;
   const actions = el.querySelector('.actions');
 
@@ -192,7 +213,47 @@ function card(c) {
   runBtn.onclick = () => runHere(c);
   actions.appendChild(runBtn);
 
+  // Clicking the command code block copies it.
+  const code = el.querySelector('code');
+  code.style.cursor = 'copy';
+  code.onclick = () => copyCmd(c.cmd);
+
   return el;
+}
+
+async function copyCmd(text, btn) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch (_) {
+    // Fallback for non-secure contexts.
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (_) { ok = false; }
+  }
+  toast(ok ? 'Command copied to clipboard' : 'Copy failed — select the text manually');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
 }
 
 async function launch(c) {
