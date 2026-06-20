@@ -122,7 +122,6 @@ banner "CF Authentication"
 # Default them so `set -u` doesn't trip when they're absent.
 CF_USERNAME="${CF_USERNAME:-}"
 CF_PASSWORD="${CF_PASSWORD:-}"
-CF_ORIGIN="${CF_ORIGIN:-}"
 
 # Only call `cf api` when the endpoint actually needs to change.
 # Calling it unconditionally resets the session even when already logged in.
@@ -140,14 +139,9 @@ if cf target -o "$CF_ORG" -s "$CF_SPACE" > /dev/null 2>&1; then
   log "Already authenticated — targeting Org=$CF_ORG | Space=$CF_SPACE"
 elif [ -n "$CF_USERNAME" ] && [ -n "$CF_PASSWORD" ]; then
   # Non-interactive auth for CI (GitHub Actions). Uses a technical/service
-  # user or platform credentials supplied via secrets. CF_ORIGIN lets you
-  # target a specific identity provider when the platform requires one.
+  # user or platform credentials supplied via secrets.
   log "Authenticating non-interactively as '$CF_USERNAME' (CI mode)..."
-  if [ -n "$CF_ORIGIN" ]; then
-    cf auth "$CF_USERNAME" "$CF_PASSWORD" --origin "$CF_ORIGIN"
-  else
-    cf auth "$CF_USERNAME" "$CF_PASSWORD"
-  fi
+  cf auth "$CF_USERNAME" "$CF_PASSWORD"
   cf target -o "$CF_ORG" -s "$CF_SPACE"
 else
   warn "No valid CF session found. Starting SSO login..."
