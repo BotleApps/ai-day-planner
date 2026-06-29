@@ -15,7 +15,7 @@ import {
   Upload,
   FileUp,
 } from 'lucide-react';
-import { loadAISettings, loadAISettingsFromServer, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettingsFromServer, isAIConfigured } from '@/lib/ai-settings';
 import { DayPlan, DEFAULT_PREFERENCES } from '@/lib/types';
 import { ACTIVITY_ICONS } from '@/lib/types';
 
@@ -43,13 +43,12 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated, mode = 'i
   const [parsed, setParsed] = useState<ParsedPreview | null>(null);
   const [error, setError] = useState('');
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
-  const [aiConfigured, setAiConfigured] = useState(() => isAIConfigured(loadAISettings()));
+  const [aiConfigured, setAiConfigured] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     loadAISettingsFromServer().then(serverSettings => {
-      saveAISettings(serverSettings);
       setAiConfigured(isAIConfigured(serverSettings));
     });
   }, [isOpen]);
@@ -62,11 +61,10 @@ export function ImportItineraryModal({ isOpen, onClose, onPlanCreated, mode = 'i
     setError('');
 
     try {
-      const settings = loadAISettings();
       const resp = await fetch('/api/ai/parse-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, settings }),
+        body: JSON.stringify({ text }),
       });
 
       const data = await resp.json();

@@ -4,46 +4,131 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  # Allow deploy-render.yml to gate on a fresh CI run for the exact commit.
+  workflow_call:
 
-# Cancel superseded runs on the same ref.
+# Cancel older runs on the same branch.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: "20.18.0"
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Prisma needs DATABASE_URL syntax-valid (not reachable) for prisma generate / build.
+  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+
 jobs:
-  verify:
-    name: Lint · Type-check · Build
+  # ─── Static analysis: lint + type-check ─────────────────────────────────
+  lint-and-types:
+    name: Lint · Type-check
     runs-on: ubuntu-latest
-    env:
-      NEXT_TELEMETRY_DISABLED: '1'
-      # Prisma only needs a syntactically valid URL to generate the client;
-      # no real database is contacted during lint/type-check/build.
-      DATABASE_URL: 'postgresql://user:pass@localhost:5432/db?schema=public'
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Lint (advisory)
-        # Non-blocking for now: the existing codebase has pre-existing lint
-        # violations. Type-check and build below are the hard gates. Flip this
-        # to a hard failure once the backlog is cleaned up.
+      - run: npm ci
+      - run: npx prisma generate
+      - name: ESLint
+        # Advisory while lint backlog is cleared. Flip to hard fail once green.
         continue-on-error: true
         run: npm run lint
-
-      - name: Type-check
+      - name: TypeScript type-check
         run: npm run type-check
 
-      - name: Build (Next.js standalone)
+  # ─── Unit tests with coverage ─────────────────────────────────────────────
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        env:
+          # Required by lib/crypto when imported under test.
+          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  # ─── Build verification ───────────────────────────────────────────────────
+  build:
+    name: Build (Next.js)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build Next.js (standalone)
         run: npm run build
+        env:
+          NEXTAUTH_URL: "http://localhost:3000"
+          AUTH_SECRET: "ci-fake-secret-not-for-runtime"
+          NEXTAUTH_SECRET: "ci-fake-secret-not-for-runtime"
+          NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID: "ci.apps.googleusercontent.com"
+          NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID: "ci.apps.googleusercontent.com"
+
+  # ─── Security: npm audit ─────────────────────────────────────────────────
+  audit:
+    name: npm audit (high+ severity, prod deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run audit:ci
+
+  # ─── Security: static code analysis (CodeQL) ─────────────────────────────
+  codeql:
+    name: CodeQL (security-extended)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  # ─── Security: secret scanning ───────────────────────────────────────────
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

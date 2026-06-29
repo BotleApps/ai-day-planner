@@ -16,8 +16,9 @@ applications:
       NODE_ENV: production
       # Secrets are injected via 'cf set-env' in deploy.sh — do NOT commit values here.
       # Required variables:
-      #   MONGODB_URI         — MongoDB Atlas connection string
-      #   NEXTAUTH_SECRET     — Random secret (openssl rand -base64 32)
+      #   DATABASE_URL        — PostgreSQL connection string
+      #   AUTH_SECRET         — Random secret (openssl rand -base64 32)
       #   NEXTAUTH_URL        — Full HTTPS URL of this CF app
       #   GOOGLE_CLIENT_ID    — Google OAuth client ID
       #   GOOGLE_CLIENT_SECRET — Google OAuth client secret
+      #   ENCRYPTION_KEY      — 64-char hex string (node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")

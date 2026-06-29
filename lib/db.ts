@@ -8,12 +8,16 @@ declare global {
 function createPrismaClient(): PrismaClient {
   const connectionString =
     process.env.DATABASE_URL ??
-    'postgresql://postgres:password@localhost:5432/ai-day-planner';
+    'postgresql://postgres:password@localhost:5432/sortedplan';
 
-  // Use require() so Turbopack cannot statically bundle/hash the package name.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PrismaPg } = require('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg');
-  const adapter = new PrismaPg({ connectionString, ssl: { rejectUnauthorized: false } });
+  // Default to strict cert verification. Set DB_SSL_REJECT_UNAUTHORIZED=false
+  // only for local dev with a self-signed cert.
+  const sslConfig = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false'
+    ? { rejectUnauthorized: false }
+    : { rejectUnauthorized: true };
+  const adapter = new PrismaPg({ connectionString, ssl: sslConfig });
   return new PrismaClient({ adapter });
 }
 

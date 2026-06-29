@@ -23,14 +23,21 @@ export async function GET() {
       enabled: row.aiEnabled,
       provider: row.provider || 'sap',
       clientId: row.clientId,
-      clientSecret: decrypt(row.clientSecretEnc),
+      // Never return plaintext secrets — return configured flags and a display hint only
+      clientSecretConfigured: !!row.clientSecretEnc,
+      clientSecretHint: row.clientSecretEnc
+        ? '••••' + decrypt(row.clientSecretEnc).slice(-4)
+        : null,
       authUrl: row.authUrl,
       apiUrl: row.apiUrl,
       resourceGroup: row.resourceGroup,
       deploymentId: row.deploymentId,
       backend: row.backend,
       modelName: row.modelName,
-      geminiApiKey: decrypt(row.geminiApiKeyEnc),
+      geminiApiKeyConfigured: !!row.geminiApiKeyEnc,
+      geminiApiKeyHint: row.geminiApiKeyEnc
+        ? '••••' + decrypt(row.geminiApiKeyEnc).slice(-4)
+        : null,
       geminiModel: row.geminiModel,
     };
 
@@ -56,19 +63,36 @@ export async function PUT(request: Request) {
       geminiApiKey, geminiModel,
     } = body;
 
+    // Look up existing row first so we can preserve encrypted secrets when the
+    // client doesn't send a fresh value (the GET response masks them).
+    const existing = await prisma.userSettings.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    // Only overwrite secrets when the client explicitly sent a non-empty value.
+    // The client sends `undefined` (omitted) when the user hasn't typed a new secret.
+    const clientSecretEnc =
+      typeof clientSecret === 'string' && clientSecret.length > 0
+        ? encrypt(clientSecret)
+        : existing?.clientSecretEnc ?? '';
+    const geminiApiKeyEnc =
+      typeof geminiApiKey === 'string' && geminiApiKey.length > 0
+        ? encrypt(geminiApiKey)
+        : existing?.geminiApiKeyEnc ?? '';
+
     const data = {
       aiEnabled: !!enabled,
       provider: provider || 'sap',
-      clientId: clientId || '',
-      clientSecretEnc: clientSecret ? encrypt(clientSecret) : '',
-      authUrl: authUrl || '',
-      apiUrl: apiUrl || '',
+      clientId: clientId ?? existing?.clientId ?? '',
+      clientSecretEnc,
+      authUrl: authUrl ?? existing?.authUrl ?? '',
+      apiUrl: apiUrl ?? existing?.apiUrl ?? '',
       resourceGroup: resourceGroup || 'default',
-      deploymentId: deploymentId || '',
+      deploymentId: deploymentId ?? existing?.deploymentId ?? '',
       backend: backend || 'openai',
-      modelName: modelName || '',
-      geminiApiKeyEnc: geminiApiKey ? encrypt(geminiApiKey) : '',
-      geminiModel: geminiModel || '',
+      modelName: modelName ?? existing?.modelName ?? '',
+      geminiApiKeyEnc,
+      geminiModel: geminiModel ?? existing?.geminiModel ?? '',
     };
 
     await prisma.userSettings.upsert({

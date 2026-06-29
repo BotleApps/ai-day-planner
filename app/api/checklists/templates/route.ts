@@ -30,8 +30,11 @@ export async function GET(request: Request) {
     const q = searchParams.get('q');
 
     if (id) {
-      const template = await prisma.checklistTemplate.findUnique({
-        where: { id },
+      const template = await prisma.checklistTemplate.findFirst({
+        where: {
+          id,
+          OR: [{ isPublished: true }, { authorId: session.user.id }],
+        },
         include: { items: { orderBy: { order: 'asc' } } },
       });
       if (!template) return NextResponse.json({ error: 'Not found' }, { status: 404 });

@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import { rateLimit } from '@/lib/rate-limit';
 
 const MAX_CHARS = 30000;
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const SUPPORTED_EXTS = new Set(['.pdf', '.pptx', '.ppt', '.docx', '.doc', '.txt', '.md']);
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rl = rateLimit(`extract:${session.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+    );
+  }
+
+  const contentLength = parseInt(req.headers.get('content-length') ?? '0');
+  if (contentLength > MAX_BYTES) {
+    return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 413 });
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();

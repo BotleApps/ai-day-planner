@@ -1,10 +1,15 @@
 name: Build Android
 
 # Builds (and signs) the Capacitor Android app bundle.
-# The native `android/` project is generated on the fly with `cap add` so it
-# does not need to be committed. The app is a thin shell that loads the web app
-# from CAP_SERVER_URL, so a build is only needed when native code/config or the
-# server URL changes.
+# Triggers:
+#   - Tag matching `android-v*` or `v*` → release AAB (signed if secrets present).
+#   - Manual via "Run workflow" → optional CAP_SERVER_URL override.
+#   - On `android/`, `mobile/`, `capacitor.config.ts` changes touching main →
+#     unsigned verification build only.
+#
+# Required secrets (signed release builds):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, CAP_SERVER_URL
 on:
   workflow_dispatch:
     inputs:
@@ -15,11 +20,24 @@ on:
     tags:
       - 'android-v*'
       - 'v*'
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'mobile/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-android.yml'
+
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   android:
     name: Build Android AAB
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # The deployed web app the native shell points at.
       CAP_SERVER_URL: ${{ github.event.inputs.server_url || secrets.CAP_SERVER_URL }}

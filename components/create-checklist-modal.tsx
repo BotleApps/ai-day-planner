@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { AIChecklistGenerationResult } from '@/lib/types';
-import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import {
   Plus, X, Sparkles, LayoutTemplate, PenLine, Check,
   Search, ArrowLeft,
@@ -141,20 +140,18 @@ export default function CreateChecklistModal({
   // ── AI generate ────────────────────────────────────────
   const handleGenerate = async () => {
     if (!aiPrompt.trim()) return;
-    const settings = loadAISettings();
-    if (!isAIConfigured(settings)) {
-      setAiError('AI is not configured. Go to Settings → Intelligence to set up your AI provider.');
-      return;
-    }
     setIsGenerating(true); setAiError('');
     try {
       const res = await fetch('/api/ai/generate-checklist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: aiPrompt.trim(), settings }),
+        body: JSON.stringify({ description: aiPrompt.trim() }),
       });
       const data: AIChecklistGenerationResult & { error?: string } = await res.json();
-      if (!res.ok || data.error) { setAiError(data.error || 'Failed to generate checklist.'); return; }
+      if (!res.ok || data.error) {
+        setAiError(data.error || 'Failed to generate checklist.');
+        return;
+      }
       setTitle(data.title || '');
       setPreviewItems(data.groups.flatMap(g => g.items.map(item => ({ title: item, groupName: g.groupName, included: true }))));
       setView('preview');
@@ -269,7 +266,7 @@ export default function CreateChecklistModal({
             </button>
           ) : <div className="header-spacer" />}
           <h2>{TITLES[view]}</h2>
-          <button className="close-btn" onClick={handleClose}><X size={18} /></button>
+          <button className="close-btn" onClick={handleClose} aria-label="Close"><X size={18} /></button>
         </div>
 
         {/* ── View: Pick mode ───────────────────── */}

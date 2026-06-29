@@ -108,9 +108,15 @@ fi
 # ── 4. Validate required secret variables ────────────────────────────────────
 for var in CF_APP_URL CF_DB_SERVICE_NAME \
            NEXTAUTH_SECRET NEXTAUTH_URL \
-           GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+           GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET \
+           ENCRYPTION_KEY; do
   [ -n "${!var:-}" ] || die "$var is not set in $ENV_FILE"
 done
+
+# ENCRYPTION_KEY must be a 64-char hex string (32 random bytes) — see lib/crypto.ts
+if ! [[ "$ENCRYPTION_KEY" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  die "ENCRYPTION_KEY must be a 64-character hex string. Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+fi
 
 log "App URL  : $CF_APP_URL"
 log "DB svc   : $CF_DB_SERVICE_NAME"
@@ -334,7 +340,7 @@ cf set-env "$APP_NAME" NEXTAUTH_SECRET      "$NEXTAUTH_SECRET"
 cf set-env "$APP_NAME" NEXTAUTH_URL         "$CF_APP_URL"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_ID     "$GOOGLE_CLIENT_ID"
 cf set-env "$APP_NAME" GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
-[ -n "${ENCRYPTION_KEY:-}" ] && cf set-env "$APP_NAME" ENCRYPTION_KEY "$ENCRYPTION_KEY"
+cf set-env "$APP_NAME" ENCRYPTION_KEY       "$ENCRYPTION_KEY"
 
 # ── 12. Start the app ─────────────────────────────────────────────────────────
 log "Starting $APP_NAME..."

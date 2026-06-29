@@ -21,6 +21,10 @@ const audiences = [
 const client = new OAuth2Client();
 
 export async function verifyGoogleIdToken(idToken: string): Promise<TokenPayload | null> {
+  if (audiences.length === 0) {
+    console.error('FATAL: No Google OAuth client IDs configured — rejecting all native tokens');
+    return null;
+  }
   try {
     const ticket = await client.verifyIdToken({
       idToken,

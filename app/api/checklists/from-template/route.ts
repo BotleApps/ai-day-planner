@@ -16,8 +16,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'templateId is required' }, { status: 400 });
     }
 
-    const template = await prisma.checklistTemplate.findUnique({
-      where: { id: templateId },
+    const template = await prisma.checklistTemplate.findFirst({
+      where: {
+        id: templateId,
+        // Only published templates OR the user's own template can be cloned
+        OR: [{ isPublished: true }, { authorId: session.user.id }],
+      },
       include: { items: { orderBy: { order: 'asc' } } },
     });
 

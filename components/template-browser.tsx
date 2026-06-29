@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChecklistTemplate, ChecklistTemplateCategory, AIChecklistGenerationResult } from '@/lib/types';
-import { loadAISettings, isAIConfigured } from '@/lib/ai-settings';
 import { Search, X, Sparkles, LayoutTemplate } from 'lucide-react';
 
 const CATEGORIES: { value: ChecklistTemplateCategory | 'all'; label: string }[] = [
@@ -48,7 +47,7 @@ export function TemplateBrowser({ isOpen, onClose, onSelect }: TemplateBrowserPr
       <div className="browser-sheet" onClick={e => e.stopPropagation()}>
         <div className="browser-header">
           <h2>Browse Templates</h2>
-          <button className="close-btn" onClick={onClose}><X size={18} /></button>
+          <button className="close-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
 
         <div className="browser-search">
@@ -202,22 +201,17 @@ export function AIChecklistModal({ isOpen, onClose, onGenerated }: AIChecklistMo
 
   const handleGenerate = async () => {
     if (!description.trim()) return;
-    const settings = loadAISettings();
-    if (!isAIConfigured(settings)) {
-      setError('AI is not configured. Go to Settings → Intelligence to set up your AI provider.');
-      return;
-    }
     setIsGenerating(true);
     setError(null);
     try {
       const res = await fetch('/api/ai/generate-checklist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: description.trim(), settings }),
+        body: JSON.stringify({ description: description.trim() }),
       });
       const data = await res.json();
-      if (data.error) {
-        setError(data.error);
+      if (!res.ok || data.error) {
+        setError(data.error || 'Failed to generate checklist.');
       } else {
         onGenerated(data as AIChecklistGenerationResult);
         setDescription('');
@@ -239,7 +233,7 @@ export function AIChecklistModal({ isOpen, onClose, onGenerated }: AIChecklistMo
             <Sparkles size={18} color="#7c3aed" />
             <h3>AI Checklist Generator</h3>
           </div>
-          <button className="close-btn" onClick={onClose}><X size={18} /></button>
+          <button className="close-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
 
         <div className="ai-body">

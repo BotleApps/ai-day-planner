@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat } from '@/lib/sap-ai-core';
-import { geminiChat } from '@/lib/gemini';
-import { AISettings } from '@/lib/ai-settings';
+import { auth } from '@/auth';
+import prisma from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { callAI } from '@/lib/ai-dispatch';
+import { DEFAULT_AI_SETTINGS } from '@/lib/ai-settings';
+import { rateLimit } from '@/lib/rate-limit';
 import { AIChecklistGenerationResult } from '@/lib/types';
 
 interface GenerateChecklistRequest {
   description: string;
-  settings: AISettings;
   planContext?: { title?: string; destination?: string };
 }
 
@@ -50,17 +52,20 @@ function parseAIChecklistResponse(raw: string): AIChecklistGenerationResult | nu
   }
 }
 
-async function runChat(settings: AISettings, systemPrompt: string, userMessage: string): Promise<string> {
-  if (settings.provider === 'gemini') {
-    if (!settings.geminiApiKey || !settings.geminiModel) {
-      throw new Error('Gemini API key and model are required');
-    }
-    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage);
-  }
-  return chat(settings, systemPrompt, userMessage);
-}
-
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rl = rateLimit(`ai-gen-checklist:${session.user.id}`, 20, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+    );
+  }
+
   let body: GenerateChecklistRequest;
   try {
     body = await req.json();
@@ -68,36 +73,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { description, settings, planContext } = body;
-
-  if (!description?.trim() || !settings) {
-    return NextResponse.json({ error: 'description and settings are required' }, { status: 400 });
+  const { description, planContext } = body;
+  if (!description?.trim()) {
+    return NextResponse.json({ error: 'description is required' }, { status: 400 });
   }
 
-  if (settings.provider === 'gemini') {
-    if (!settings.geminiApiKey || !settings.geminiModel) {
-      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
-    }
-  } else {
-    if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
-      return NextResponse.json({ error: 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.' }, { status: 400 });
-    }
+  const row = await prisma.userSettings.findUnique({ where: { userId: session.user.id } });
+  if (!row?.aiEnabled) {
+    return NextResponse.json({ error: 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.' }, { status: 400 });
   }
+
+  const settings = {
+    ...DEFAULT_AI_SETTINGS,
+    enabled: row.aiEnabled,
+    provider: row.provider as 'sap' | 'gemini',
+    clientId: row.clientId,
+    clientSecret: decrypt(row.clientSecretEnc),
+    authUrl: row.authUrl,
+    apiUrl: row.apiUrl,
+    resourceGroup: row.resourceGroup,
+    deploymentId: row.deploymentId,
+    backend: row.backend as 'openai' | 'bedrock' | 'vertex',
+    modelName: row.modelName,
+    geminiApiKey: decrypt(row.geminiApiKeyEnc),
+    geminiModel: row.geminiModel,
+  };
 
   const contextNote = planContext?.title
     ? `\n\nContext: This checklist is for the plan "${planContext.title}"${planContext.destination ? ` in ${planContext.destination}` : ''}.`
     : '';
 
   try {
-    const raw = await runChat(settings, SYSTEM_PROMPT + contextNote, description);
+    const raw = await callAI(settings, SYSTEM_PROMPT + contextNote, description);
     const result = parseAIChecklistResponse(raw);
     if (!result) {
       return NextResponse.json({ error: 'Could not parse AI response. Please try again.' }, { status: 502 });
     }
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('AI checklist generation error:', message);
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error('AI checklist generation error:', err);
+    return NextResponse.json({ error: 'AI generation failed. Please try again.' }, { status: 502 });
   }
 }

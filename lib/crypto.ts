@@ -3,11 +3,14 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 const ALGO = 'aes-256-gcm';
 
 function getKey(): Buffer {
-  const k = process.env.ENCRYPTION_KEY;
-  if (!k || k.length < 32) {
-    throw new Error('ENCRYPTION_KEY env var must be set and at least 32 characters');
+  const k = process.env.ENCRYPTION_KEY ?? '';
+  if (!/^[0-9a-fA-F]{64}$/.test(k)) {
+    throw new Error(
+      'ENCRYPTION_KEY must be a 64-character hex string (32 random bytes). ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
   }
-  return Buffer.from(k.slice(0, 32), 'utf8');
+  return Buffer.from(k, 'hex');
 }
 
 /** Encrypt plaintext → "ivHex:tagHex:ciphertextHex" */

@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 // google-auth-library, which only lives in the full `auth.ts`).
 const { auth } = NextAuth(authConfig);
 
-/** Build a base URL that respects reverse-proxy headers (CF GoRouter, etc.) */
+/** Build a base URL that respects reverse-proxy headers (Render's edge sets X-Forwarded-*). */
 function getBaseUrl(req: { headers: Headers; nextUrl: URL }): URL {
   const proto = req.headers.get('x-forwarded-proto') ?? req.nextUrl.protocol.replace(':', '');
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? req.nextUrl.host;
@@ -17,18 +17,15 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
-  // Always allow: NextAuth internal routes
-  if (nextUrl.pathname.startsWith('/api/auth')) {
+  // Always allow: NextAuth internal routes and health check
+  const PUBLIC_API_PREFIXES = ['/api/auth', '/api/health'];
+  if (PUBLIC_API_PREFIXES.some(p => nextUrl.pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Always allow: all API routes (they handle their own auth internally)
-  if (nextUrl.pathname.startsWith('/api/')) {
-    return NextResponse.next();
-  }
-
-  // Always allow: health check
-  if (nextUrl.pathname === '/api/health') {
+  // Share-link API routes are public (they serve unauthenticated viewers)
+  const PUBLIC_API_EXACT = ['/api/plans', '/api/checklists', '/api/activities'];
+  if (PUBLIC_API_EXACT.some(p => nextUrl.pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
@@ -47,8 +44,10 @@ export default auth((req) => {
   // Sign-in page: redirect logged-in users to callbackUrl (or home)
   if (nextUrl.pathname === '/sign-in') {
     if (isLoggedIn) {
-      const callbackUrl = nextUrl.searchParams.get('callbackUrl') ?? '/';
-      return NextResponse.redirect(new URL(callbackUrl, base));
+      const raw = nextUrl.searchParams.get('callbackUrl') ?? '/';
+      // Reject external/protocol-relative redirects
+      const safe = raw.startsWith('/') && !raw.startsWith('//') && !raw.includes(':') ? raw : '/';
+      return NextResponse.redirect(new URL(safe, base));
     }
     return NextResponse.next();
   }

@@ -1,161 +1,100 @@
-# AI Day Planner
+# SortedPlan (AI Day Planner)
 
-A modern, cross-platform day planner application built with React, Next.js, and TypeScript. Features a beautiful UI with light/dark mode support and MongoDB integration.
+A modern, cross-platform day planner with AI-powered features, built with Next.js, TypeScript, and PostgreSQL.
+
+Deployed on **[Render](https://render.com)**; ships as native **iOS** and **Android** apps via **Capacitor**.
 
 ## Features
 
-- 🎨 **Beautiful Modern UI** - Clean, intuitive interface with smooth animations
-- 🌓 **Light & Dark Modes** - Seamless theme switching
-- 📱 **Cross-Platform** - Works on Web, iOS, and Android
-- ☁️ **Cloud-Ready** - Deployed on Vercel with MongoDB Atlas
-- ⚡ **Fast & Responsive** - Built with Next.js 16 and TypeScript
-- ✅ **Task Management** - Create, complete, and delete tasks with ease
+- 🎨 **Beautiful Modern UI** — Clean, intuitive interface with smooth animations
+- 🌓 **Light & Dark Modes** — Seamless theme switching
+- 📱 **Cross-Platform** — Web, iOS, Android (one codebase)
+- ✅ **Plans + Checklists + Tasks** — Plan trips, packing checklists, daily tasks
+- 🤖 **AI assistance** — SAP AI Core or Google Gemini, credentials stored encrypted per-user
+- 🔗 **Share links** — View/edit links with revocation
+- 🔐 **Auth** — Google OAuth (web) + native Google Sign-In (iOS/Android)
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16, React 19, TypeScript
-- **Styling**: Tailwind CSS 4
-- **Backend**: Next.js API Routes
-- **Database**: MongoDB
-- **Deployment**: Vercel
-- **Icons**: Lucide React
+- **Frontend:** Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4
+- **Backend:** Next.js API Routes · Prisma 7 · PostgreSQL
+- **Auth:** NextAuth v5 (JWT) + native Google Sign-In via @capgo/capacitor-social-login
+- **Mobile:** Capacitor 7 (remote-server pattern)
+- **Deploy:** Render Blueprint (`render.yaml`) — auto-deploy on push to `main`
+- **Tests:** Vitest + v8 coverage
+- **CI:** GitHub Actions (lint, type-check, tests, npm audit, CodeQL, gitleaks)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- MongoDB Atlas account (or local MongoDB instance)
+- Node.js 20.x
+- PostgreSQL 16 (local Docker is easiest: `docker run -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:16`)
+- For iOS: macOS + Xcode + CocoaPods
+- For Android: Android Studio + JDK 17
 
-### Installation
+### Local development
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/BotleApps/ai-day-planner.git
 cd ai-day-planner
-```
 
-2. Install dependencies:
-```bash
 npm install
+cp .env.example .env.local      # then fill in the values (see .env.example)
+node migrate-runner.js           # apply DB migrations
+npm run dev                      # http://localhost:3000
 ```
 
-3. Set up environment variables:
-   - Copy `.env.example` to `.env.local`
-   - Update `MONGODB_URI` with your MongoDB connection string
+### Run the native shells locally
 
 ```bash
-cp .env.example .env.local
-```
-
-4. Run the development server:
-```bash
-npm run dev
-```
-
-5. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## Environment Variables
-
-Create a `.env.local` file in the root directory with the following variables:
-
-```env
-MONGODB_URI=your_mongodb_connection_string
+npm run mobile:ios       # iOS Simulator → http://localhost:3000
+npm run mobile:android   # Android Emulator → http://10.0.2.2:3000
 ```
 
 ## Deployment
 
-### Deploy to Vercel
+**Production:** Render Blueprint at [render.yaml](render.yaml). See
+[RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for the one-time setup steps.
 
-1. Push your code to GitHub
-2. Import your repository in Vercel
-3. Add the `MONGODB_URI` environment variable in Vercel project settings
-4. Deploy!
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
-
-### MongoDB Setup
-
-1. Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Create a database user
-3. Get your connection string
-4. Add it to your environment variables
-
-## Building for Mobile
-
-This app is built with Next.js and can be wrapped with Capacitor or similar tools for iOS and Android:
-
-### Option 1: Using Capacitor
-
-```bash
-npm install @capacitor/core @capacitor/cli
-npx cap init
-npx cap add ios
-npx cap add android
-npm run build
-npx cap sync
-```
-
-### Option 2: Progressive Web App (PWA)
-
-The app can also be installed as a PWA on mobile devices directly from the browser.
+**Native apps:** see [MOBILE_DEPLOYMENT.md](MOBILE_DEPLOYMENT.md) and the
+per-platform OAuth setup at [MOBILE_OAUTH_SETUP.md](MOBILE_OAUTH_SETUP.md).
 
 ## Project Structure
 
 ```
-ai-day-planner/
-├── app/
-│   ├── api/
-│   │   └── tasks/
-│   │       └── route.ts      # Task API endpoints
-│   ├── layout.tsx            # Root layout with theme provider
-│   ├── page.tsx              # Main page component
-│   └── globals.css           # Global styles
-├── components/
-│   ├── task-form.tsx         # Task creation form
-│   ├── task-item.tsx         # Individual task component
-│   ├── theme-provider.tsx    # Theme context provider
-│   └── theme-toggle.tsx      # Dark/light mode toggle
-├── lib/
-│   └── mongodb.ts            # MongoDB connection utility
-└── public/                   # Static assets
+app/                    Next.js App Router (pages + API routes)
+  api/                  Backend API routes (plans, checklists, tasks, ai, …)
+components/             React components
+lib/                    Server + client utilities (crypto, rate-limit, auth helpers, AI dispatch)
+prisma/                 Schema + migrations
+ios/                    Capacitor iOS native shell
+android/                Capacitor Android native shell (scaffold on first `npm run cap:add:android`)
+mobile/www/             Fallback page shown when CAP_SERVER_URL is unset
+tests/                  Vitest unit tests
+.github/workflows/      CI + deploy + iOS/Android build pipelines
+legacy/sap-cf/          Archived SAP BTP CF deployment (no longer used)
 ```
 
-## API Routes
+## Scripts
 
-### GET /api/tasks
-Fetch all tasks
-
-### POST /api/tasks
-Create a new task
-```json
-{
-  "title": "Task title",
-  "description": "Task description",
-  "time": "14:30"
-}
-```
-
-### PUT /api/tasks
-Update a task
-```json
-{
-  "id": "task_id",
-  "completed": true
-}
-```
-
-### DELETE /api/tasks?id=task_id
-Delete a task
+| Command | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server |
+| `npm run build` | Standalone production build |
+| `npm test` | Vitest unit tests |
+| `npm run test:coverage` | Vitest with v8 coverage report |
+| `npm run lint` / `lint:fix` | ESLint |
+| `npm run type-check` | TypeScript no-emit check |
+| `node migrate-runner.js` | Apply Prisma SQL migrations (transactional) |
+| `npm run mobile:ios` / `mobile:android` | One-command local sim/emulator run |
+| `npm run cap:ios` / `cap:android` | Sync native + open Xcode/Android Studio |
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Open a PR against `main`. CI runs lint, type-check, tests, build, npm audit,
+CodeQL, and gitleaks. All must pass before merge.
 
 ## License
 
-MIT License - feel free to use this project for personal or commercial purposes.
-
-## Support
-
-For support, please open an issue in the GitHub repository.
+MIT — see [LICENSE](LICENSE).

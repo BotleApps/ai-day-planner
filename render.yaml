@@ -1,0 +1,91 @@
+# Render.com Infrastructure-as-Code for SortedPlan
+# https://render.com/docs/blueprint-spec
+#
+# After landing this file in the repo, connect the repo to Render once
+# ("New + → Blueprint") and Render will create everything from this spec.
+# Subsequent pushes to `main` auto-deploy.
+#
+# Secrets are NOT stored in this file. Set them in the Render Dashboard
+# under the web service → Environment.
+
+databases:
+  - name: sortedplan-db
+    plan: basic-256mb         # bump to standard/pro for prod traffic
+    databaseName: sortedplan
+    user: sortedplan
+    postgresMajorVersion: "16"
+    ipAllowList: []           # internal-only — accessed by the web service
+
+services:
+  - type: web
+    name: sortedplan-web
+    runtime: node
+    plan: starter             # 'free' sleeps after 15 min idle; 'starter' stays warm
+    region: oregon            # MUST match the DB region for low latency + same network
+    branch: main
+    autoDeploy: true
+    rootDir: .
+
+    # 1. Install deps  2. Generate Prisma client  3. Build Next.js standalone
+    buildCommand: npm ci && npx prisma generate && npm run build
+
+    # Render runs preDeploy BEFORE switching traffic to the new build.
+    # Migrations run here so a failed migration aborts the deploy without
+    # touching the live web service.
+    preDeployCommand: node migrate-runner.js
+
+    # Standalone Next.js needs static assets copied alongside server.js.
+    # Render builds in the project root, so we copy then start.
+    startCommand: |
+      cp -r public .next/standalone/ 2>/dev/null || true
+      cp -r .next/static .next/standalone/.next/ 2>/dev/null || true
+      node .next/standalone/server.js
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: HOSTNAME
+        value: 0.0.0.0
+
+      # DB connection from the managed Postgres above (auto-resolved by Render)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sortedplan-db
+          property: connectionString
+
+      # NextAuth — Render injects RENDER_EXTERNAL_URL = "https://<service>.onrender.com"
+      - key: NEXTAUTH_URL
+        fromService:
+          type: web
+          name: sortedplan-web
+          envVarKey: RENDER_EXTERNAL_URL
+
+      # Secrets — set in Render Dashboard. sync:false means "manage manually".
+      - key: AUTH_SECRET
+        sync: false           # `openssl rand -base64 32`
+      - key: NEXTAUTH_SECRET
+        sync: false           # same value as AUTH_SECRET (NextAuth v5 reads either)
+      - key: ENCRYPTION_KEY
+        sync: false           # 64-char hex: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+      # Google OAuth — all three audiences accepted by lib/verify-google-token.ts
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_IOS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ANDROID_CLIENT_ID
+        sync: false
+
+      # Public client IDs — baked into JS bundle at build time (visible to client).
+      - key: NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID
+        sync: false

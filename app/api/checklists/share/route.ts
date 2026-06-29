@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { auth } from '@/auth';
-import { generateId } from '@/lib/utils';
+import { generateId, generateShareToken } from '@/lib/utils';
 
 // POST — create or return existing share link for a checklist
 export async function POST(request: Request) {
@@ -36,12 +36,13 @@ export async function POST(request: Request) {
       });
     }
 
-    const token = generateId();
-    const link = await prisma.checklistShareLink.create({
-      data: { id: generateId(), checklistId, token, permission, isActive: true },
-    });
-
-    await prisma.checklist.update({ where: { id: checklistId }, data: { isPublic: true } });
+    const token = generateShareToken();
+    const [link] = await prisma.$transaction([
+      prisma.checklistShareLink.create({
+        data: { id: generateId(), checklistId, token, permission, isActive: true },
+      }),
+      prisma.checklist.update({ where: { id: checklistId }, data: { isPublic: true } }),
+    ]);
 
     const base = request.headers.get('origin') ?? '';
     return NextResponse.json({ link: { ...link, url: `${base}/?cshare=${token}` } });
@@ -74,8 +75,10 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await prisma.sharedChecklistAccess.deleteMany({ where: { linkId } });
-    await prisma.checklistShareLink.update({ where: { id: linkId }, data: { isActive: false } });
+    await prisma.$transaction([
+      prisma.sharedChecklistAccess.deleteMany({ where: { linkId } }),
+      prisma.checklistShareLink.update({ where: { id: linkId }, data: { isActive: false } }),
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

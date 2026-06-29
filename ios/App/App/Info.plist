@@ -45,5 +45,21 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!--
+	  Google Sign-In requires the reversed iOS OAuth client ID as a URL scheme.
+	  Replace the placeholder below with the value from Google Cloud Console:
+	    Credentials → your iOS OAuth client → iOS URL scheme
+	  It looks like:  com.googleusercontent.apps.123456789-abcdefg
+	  After updating, run `npx cap sync ios` and rebuild in Xcode.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.650060721357-j01pfklfe15a5be1aacc408v5j9dpon2</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

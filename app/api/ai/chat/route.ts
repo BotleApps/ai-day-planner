@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat } from '@/lib/sap-ai-core';
-import { geminiChat } from '@/lib/gemini';
-import { AISettings } from '@/lib/ai-settings';
+import { auth } from '@/auth';
+import prisma from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { callAI } from '@/lib/ai-dispatch';
+import { DEFAULT_AI_SETTINGS } from '@/lib/ai-settings';
+import { rateLimit } from '@/lib/rate-limit';
 import { Activity, PlanPreferences } from '@/lib/types';
 
 interface ChatRequest {
   message: string;
-  settings: AISettings;
   context: {
     destination?: string;
     date?: string;
@@ -66,17 +68,20 @@ function parseAIResponse(raw: string): { message: string; suggestions: Partial<A
   }
 }
 
-async function runChat(settings: AISettings, systemPrompt: string, userMessage: string): Promise<string> {
-  if (settings.provider === 'gemini') {
-    if (!settings.geminiApiKey || !settings.geminiModel) {
-      throw new Error('Gemini API key and model are required');
-    }
-    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage);
-  }
-  return chat(settings, systemPrompt, userMessage);
-}
-
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rl = rateLimit(`ai-chat:${session.user.id}`, 20, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+    );
+  }
+
   let body: ChatRequest;
   try {
     body = await req.json();
@@ -84,30 +89,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { message, settings, context } = body;
-
-  if (!message || !settings) {
-    return NextResponse.json({ error: 'message and settings are required' }, { status: 400 });
+  const { message, context } = body;
+  if (!message) {
+    return NextResponse.json({ error: 'message is required' }, { status: 400 });
   }
 
-  if (settings.provider === 'gemini') {
-    if (!settings.geminiApiKey || !settings.geminiModel) {
-      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
-    }
-  } else {
-    if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl || !settings.deploymentId) {
-      return NextResponse.json({ error: 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.' }, { status: 400 });
-    }
+  const row = await prisma.userSettings.findUnique({ where: { userId: session.user.id } });
+  if (!row?.aiEnabled) {
+    return NextResponse.json({ error: 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.' }, { status: 400 });
   }
+
+  const settings = {
+    ...DEFAULT_AI_SETTINGS,
+    enabled: row.aiEnabled,
+    provider: row.provider as 'sap' | 'gemini',
+    clientId: row.clientId,
+    clientSecret: decrypt(row.clientSecretEnc),
+    authUrl: row.authUrl,
+    apiUrl: row.apiUrl,
+    resourceGroup: row.resourceGroup,
+    deploymentId: row.deploymentId,
+    backend: row.backend as 'openai' | 'bedrock' | 'vertex',
+    modelName: row.modelName,
+    geminiApiKey: decrypt(row.geminiApiKeyEnc),
+    geminiModel: row.geminiModel,
+  };
 
   try {
     const systemPrompt = buildSystemPrompt(context || {});
-    const raw = await runChat(settings, systemPrompt, message);
+    const raw = await callAI(settings, systemPrompt, message);
     const result = parseAIResponse(raw);
     return NextResponse.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('AI chat error:', msg);
-    return NextResponse.json({ error: msg }, { status: 502 });
+    console.error('AI chat error:', err);
+    return NextResponse.json({ error: 'AI provider request failed' }, { status: 502 });
   }
 }

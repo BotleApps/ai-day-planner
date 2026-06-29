@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  // Standalone output required for SAP BTP Cloud Foundry deployment
+  // Standalone output: a self-contained Node.js server is emitted at
+  // .next/standalone/server.js — required by Render's startCommand (see render.yaml).
   output: 'standalone',
   // Tell Next.js/Turbopack NOT to bundle these Node.js packages — load them
   // natively at runtime so their internal require() paths aren't mangled.
@@ -19,7 +20,6 @@ const nextConfig: NextConfig = {
     'pgpass',
     'pdf-parse',
     'officeparser',
-    'pdfjs-dist',
   ],
   // Turbopack configuration
   turbopack: {

@@ -1,28 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
+import prisma from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
 import { discoverModels } from '@/lib/sap-ai-core';
-import { AISettings } from '@/lib/ai-settings';
+import { DEFAULT_AI_SETTINGS } from '@/lib/ai-settings';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
-  let settings: Partial<AISettings>;
-  try {
-    settings = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!settings.clientId || !settings.clientSecret || !settings.authUrl || !settings.apiUrl) {
+  const rl = rateLimit(`ai-models:${session.user.id}`, 10, 60_000);
+  if (!rl.ok) {
     return NextResponse.json(
-      { error: 'clientId, clientSecret, authUrl, and apiUrl are required' },
-      { status: 400 },
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
     );
   }
 
+  // Ignore any credentials in the body — always load from DB
+  try { await req.json(); } catch { /* ignore */ }
+
+  const row = await prisma.userSettings.findUnique({ where: { userId: session.user.id } });
+  if (!row?.clientId || !row?.authUrl || !row?.apiUrl) {
+    return NextResponse.json({ error: 'SAP AI Core is not configured' }, { status: 400 });
+  }
+
+  const settings = {
+    ...DEFAULT_AI_SETTINGS,
+    provider: 'sap' as const,
+    clientId: row.clientId,
+    clientSecret: decrypt(row.clientSecretEnc),
+    authUrl: row.authUrl,
+    apiUrl: row.apiUrl,
+    resourceGroup: row.resourceGroup,
+    deploymentId: row.deploymentId,
+    backend: row.backend as 'openai' | 'bedrock' | 'vertex',
+    modelName: row.modelName,
+  };
+
   try {
-    const models = await discoverModels(settings as AISettings);
+    const models = await discoverModels(settings);
     return NextResponse.json({ models });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('AI model discovery error:', message);
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error('AI model discovery error:', err);
+    const isAuth = err instanceof Error && /401|403|auth/i.test(err.message);
+    return NextResponse.json(
+      { error: isAuth ? 'Authentication with SAP AI Core failed. Check your credentials.' : 'Failed to discover models.' },
+      { status: 502 },
+    );
   }
 }

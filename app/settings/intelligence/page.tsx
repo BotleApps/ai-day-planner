@@ -134,17 +134,21 @@ export default function IntelligencePage() {
     setSapError('');
     setSapModels([]);
 
+    // Save current credentials to DB first so the discovery endpoint can load them securely
+    try {
+      await saveAISettingsToServer({ ...settings, provider: 'sap' });
+    } catch {
+      setSapStatus('error');
+      setSapError('Failed to save credentials before discovery. Please try again.');
+      setIsDiscoveringSap(false);
+      return;
+    }
+
     try {
       const resp = await fetch('/api/ai/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: settings.clientId,
-          clientSecret: settings.clientSecret,
-          authUrl: settings.authUrl,
-          apiUrl: settings.apiUrl,
-          resourceGroup: settings.resourceGroup || 'default',
-        }),
+        body: JSON.stringify({}),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -182,11 +186,21 @@ export default function IntelligencePage() {
     setGeminiError('');
     setGeminiModels([]);
 
+    // Save current credentials to DB first so the discovery endpoint can load them securely
+    try {
+      await saveAISettingsToServer({ ...settings, provider: 'gemini' });
+    } catch {
+      setGeminiStatus('error');
+      setGeminiError('Failed to save credentials before fetching models. Please try again.');
+      setIsFetchingGemini(false);
+      return;
+    }
+
     try {
       const resp = await fetch('/api/ai/gemini-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: settings.geminiApiKey }),
+        body: JSON.stringify({}),
       });
       const data = await resp.json();
       if (!resp.ok) {

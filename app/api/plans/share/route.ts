@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { auth } from '@/auth';
-import { generateId } from '@/lib/utils';
+import { generateId, generateShareToken } from '@/lib/utils';
 
 // POST — create or return existing share link for a plan
 export async function POST(request: Request) {
@@ -36,14 +36,14 @@ export async function POST(request: Request) {
       });
     }
 
-    // Create new link
-    const token = generateId();
-    const link = await prisma.shareLink.create({
-      data: { id: generateId(), planId, token, permission, isActive: true },
-    });
-
-    // Ensure plan is marked public
-    await prisma.plan.update({ where: { id: planId }, data: { isPublic: true } });
+    // Create new link — atomically create link and mark plan public
+    const token = generateShareToken();
+    const [link] = await prisma.$transaction([
+      prisma.shareLink.create({
+        data: { id: generateId(), planId, token, permission, isActive: true },
+      }),
+      prisma.plan.update({ where: { id: planId }, data: { isPublic: true } }),
+    ]);
 
     const base = request.headers.get('origin') ?? '';
     return NextResponse.json({ link: { ...link, url: `${base}/?share=${token}` } });
@@ -76,11 +76,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Immediate access loss: delete all SharedAccess records for this link
-    await prisma.sharedAccess.deleteMany({ where: { linkId } });
-
-    // Deactivate the link
-    await prisma.shareLink.update({ where: { id: linkId }, data: { isActive: false } });
+    // Atomically delete members and deactivate the link
+    await prisma.$transaction([
+      prisma.sharedAccess.deleteMany({ where: { linkId } }),
+      prisma.shareLink.update({ where: { id: linkId }, data: { isActive: false } }),
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

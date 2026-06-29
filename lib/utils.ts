@@ -1,3 +1,4 @@
+import { randomUUID, randomBytes } from 'crypto';
 import { Activity, TimeSlot, DayPlan, ACTIVITY_COLORS, ACTIVITY_ICONS, ActivityType } from './types';
 
 // Time utilities
@@ -222,9 +223,14 @@ export function getActivityIcon(type: ActivityType, customIcon?: string): string
   return customIcon || ACTIVITY_ICONS[type] || ACTIVITY_ICONS.custom;
 }
 
-// Generate unique ID
+// Generate a cryptographically random unique ID for DB records
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return randomUUID();
+}
+
+// Generate a cryptographically secure URL-safe token for share links
+export function generateShareToken(): string {
+  return randomBytes(24).toString('base64url');
 }
 
 // Format date

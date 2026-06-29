@@ -72,14 +72,17 @@ async function run() {
     );
 
     try {
+      await client.query('BEGIN');
       await client.query(sql);
       await client.query(
         `UPDATE "_prisma_migrations" SET finished_at = NOW(), applied_steps_count = 1 WHERE id = $1`,
         [id]
       );
+      await client.query('COMMIT');
       console.log('  ✓ applied:', dir);
       ran++;
     } catch (err) {
+      await client.query('ROLLBACK');
       await client.query(
         `UPDATE "_prisma_migrations" SET logs = $1, rolled_back_at = NOW() WHERE id = $2`,
         [err.message, id]
@@ -97,16 +100,15 @@ async function run() {
   const appUser = process.env.DB_APP_USER;
   if (appUser) {
     console.log(`Granting privileges to app user: ${appUser}`);
-    await client.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${appUser}"`);
-    await client.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${appUser}"`);
+    await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${appUser}"`);
+    await client.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${appUser}"`);
     console.log('Grants applied.');
   } else {
-    // Derive the username from DATABASE_URL
     const url = new URL(process.env.DATABASE_URL);
     const user = url.username;
     console.log(`Granting privileges to database user: ${user}`);
-    await client.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${user}"`);
-    await client.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${user}"`);
+    await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${user}"`);
+    await client.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${user}"`);
     console.log('Grants applied.');
   }
 

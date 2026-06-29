@@ -3,15 +3,8 @@ import prisma from '@/lib/db';
 import { auth } from '@/auth';
 import { Checklist, ChecklistItem } from '@/lib/types';
 import { resolveChecklistPermission } from '@/lib/checklist-access';
-
-function generateShareLink() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
+import { generateShareToken } from '@/lib/utils';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 function shapeItem(item: {
   id: string; checklistId: string; title: string; groupName: string;
@@ -43,6 +36,14 @@ export async function GET(request: Request) {
 
     // ── Share link branch — no auth required for view ─────────────────────────
     if (shareToken) {
+      // Rate-limit unauthenticated lookups by IP to prevent token brute-forcing
+      const rl = rateLimit(`cshare:${getClientIp({ headers: request.headers })}`, 60, 60_000);
+      if (!rl.ok) {
+        return NextResponse.json(
+          { error: 'Too many requests.' },
+          { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+        );
+      }
       // Try new ChecklistShareLink table first
       const shareLink = await prisma.checklistShareLink.findUnique({
         where: { token: shareToken },
@@ -179,8 +180,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, description, dueDate, dueTime, planId, items } = body;
 
-    if (!title) {
+    if (!title || typeof title !== 'string') {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    }
+    if (title.length > 200) {
+      return NextResponse.json({ error: 'Title is too long (max 200 chars)' }, { status: 400 });
+    }
+    if (description && typeof description === 'string' && description.length > 5000) {
+      return NextResponse.json({ error: 'Description is too long (max 5000 chars)' }, { status: 400 });
+    }
+    if (Array.isArray(items) && items.length > 500) {
+      return NextResponse.json({ error: 'Too many items (max 500)' }, { status: 400 });
     }
 
     const checklist = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
@@ -279,7 +289,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Checklist not found' }, { status: 404 });
     }
 
-    const shareLink = checklist.shareLink || generateShareLink();
+    const shareLink = checklist.shareLink || generateShareToken();
 
     await prisma.checklist.update({
       where: { id },

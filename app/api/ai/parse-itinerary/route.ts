@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chat } from '@/lib/sap-ai-core';
-import { geminiChat } from '@/lib/gemini';
-import { AISettings } from '@/lib/ai-settings';
+import { randomUUID } from 'crypto';
+import { auth } from '@/auth';
+import prisma from '@/lib/db';
+import { decrypt } from '@/lib/crypto';
+import { callAI } from '@/lib/ai-dispatch';
+import { DEFAULT_AI_SETTINGS } from '@/lib/ai-settings';
+import { rateLimit } from '@/lib/rate-limit';
 import { Activity, DayPlan } from '@/lib/types';
-
-interface ParseRequest {
-  text: string;
-  settings: AISettings;
-}
 
 interface ParsedPlan {
   title: string;
   destination: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
+  startDate: string;
+  endDate: string;
   description?: string;
   days: Array<{
     dayNumber: number;
@@ -61,10 +60,6 @@ Rules:
 - Map activity types: airport/flight/bus/transfer → "travel", restaurant/lunch/dinner/breakfast → "meal", museum/temple/landmark → "sightseeing", hotel/check-in/rest → "rest", market/shopping → "shopping", show/concert → "entertainment".
 - Preserve the original day structure from the itinerary.`;
 
-function generateId(): string {
-  return Math.random().toString(36).slice(2, 11);
-}
-
 function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(':').map(Number);
   const total = h * 60 + m + minutes;
@@ -79,7 +74,7 @@ function normaliseDays(rawDays: ParsedPlan['days']): DayPlan[] {
       const duration = a.duration || 60;
       cursor = addMinutes(startTime, duration);
       return {
-        id: generateId(),
+        id: randomUUID(),
         title: a.title || 'Activity',
         type: a.type || 'activity',
         startTime,
@@ -92,7 +87,7 @@ function normaliseDays(rawDays: ParsedPlan['days']): DayPlan[] {
       };
     });
     return {
-      id: generateId(),
+      id: randomUUID(),
       date: d.date,
       dayNumber: d.dayNumber,
       title: d.title,
@@ -109,42 +104,55 @@ function parseAIJson(raw: string): ParsedPlan {
   return JSON.parse(cleaned);
 }
 
-async function runChat(settings: AISettings, systemPrompt: string, userMessage: string, maxTokens: number): Promise<string> {
-  if (settings.provider === 'gemini') {
-    if (!settings.geminiApiKey || !settings.geminiModel) {
-      throw new Error('Gemini API key and model are required');
-    }
-    return geminiChat(settings.geminiApiKey, settings.geminiModel, systemPrompt, userMessage, maxTokens);
-  }
-  return chat(settings, systemPrompt, userMessage, maxTokens);
-}
-
 export async function POST(req: NextRequest) {
-  let body: ParseRequest;
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rl = rateLimit(`ai-parse:${session.user.id}`, 10, 60_000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+    );
+  }
+
+  let body: { text: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { text, settings } = body;
-
+  const { text } = body;
   if (!text?.trim()) {
     return NextResponse.json({ error: 'text is required' }, { status: 400 });
   }
 
-  if (settings?.provider === 'gemini') {
-    if (!settings?.geminiApiKey || !settings?.geminiModel) {
-      return NextResponse.json({ error: 'Gemini API key and model are required' }, { status: 400 });
-    }
-  } else {
-    if (!settings?.clientId || !settings?.deploymentId) {
-      return NextResponse.json({ error: 'AI provider is not configured' }, { status: 400 });
-    }
+  const row = await prisma.userSettings.findUnique({ where: { userId: session.user.id } });
+  if (!row?.aiEnabled) {
+    return NextResponse.json({ error: 'AI provider is not configured' }, { status: 400 });
   }
 
+  const settings = {
+    ...DEFAULT_AI_SETTINGS,
+    enabled: row.aiEnabled,
+    provider: row.provider as 'sap' | 'gemini',
+    clientId: row.clientId,
+    clientSecret: decrypt(row.clientSecretEnc),
+    authUrl: row.authUrl,
+    apiUrl: row.apiUrl,
+    resourceGroup: row.resourceGroup,
+    deploymentId: row.deploymentId,
+    backend: row.backend as 'openai' | 'bedrock' | 'vertex',
+    modelName: row.modelName,
+    geminiApiKey: decrypt(row.geminiApiKeyEnc),
+    geminiModel: row.geminiModel,
+  };
+
   try {
-    const raw = await runChat(settings, SYSTEM_PROMPT, text.slice(0, 12000), 8000);
+    const raw = await callAI(settings, SYSTEM_PROMPT, text.slice(0, 12000), 8000);
     const parsed = parseAIJson(raw);
     const days = normaliseDays(parsed.days || []);
 
@@ -157,8 +165,7 @@ export async function POST(req: NextRequest) {
       days,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('parse-itinerary error:', msg);
-    return NextResponse.json({ error: msg }, { status: 502 });
+    console.error('parse-itinerary error:', err);
+    return NextResponse.json({ error: 'AI parsing failed. Please try again.' }, { status: 502 });
   }
 }

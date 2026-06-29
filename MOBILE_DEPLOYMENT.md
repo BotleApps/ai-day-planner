@@ -2,6 +2,10 @@
 
 SortedPlan ships to **iOS and Android** as a native app using **Capacitor**.
 
+> **Setting up native sign-in for the first time?** See
+> [MOBILE_OAUTH_SETUP.md](MOBILE_OAUTH_SETUP.md) for the step-by-step Google
+> OAuth client IDs + SHA-1 + Info.plist wiring checklist.
+
 ## Why the "remote server" model (and not a static export)
 
 This app is **not** a static site. It uses:

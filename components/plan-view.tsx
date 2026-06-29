@@ -8,6 +8,7 @@ import Timeline, { ActivityDetailPopup } from '@/components/timeline';
 import AIPanel from '@/components/ai-panel';
 import ActivityModal from '@/components/activity-modal';
 import ConfirmDialog from '@/components/confirm-dialog';
+import { useEscapeKey } from '@/lib/use-escape-key';
 import {
   Plus,
   Share2,
@@ -90,6 +91,14 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [isDetailPopupOpen, setIsDetailPopupOpen] = useState(false);
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
 
+  const initialDaySetRef = useRef(false);
+
+  // Reset initial-day tracking when the plan changes (e.g. user navigates to a different plan)
+  useEffect(() => {
+    initialDaySetRef.current = false;
+    setSelectedDayId('');
+  }, [planId, shareToken]);
+
   // Fetch plan
   const fetchPlan = useCallback(async () => {
     try {
@@ -101,11 +110,12 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
       if (data.plan) {
         setPlan(data.plan);
         if (data.userPermission) setUserPermission(data.userPermission);
-        if (!selectedDayId && data.plan.days.length > 0) {
-          // Select today's day or first day
+        if (!initialDaySetRef.current && data.plan.days.length > 0) {
+          // Select today's day or first day — only on initial load
           const today = new Date().toISOString().split('T')[0];
           const todayDay = data.plan.days.find((d: DayPlan) => d.date === today);
           setSelectedDayId(todayDay?.id || data.plan.days[0].id);
+          initialDaySetRef.current = true;
         }
       }
     } catch (error) {
@@ -113,7 +123,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [planId, shareToken, selectedDayId]);
+  }, [planId, shareToken]); // selectedDayId intentionally excluded — initial selection tracked via ref
 
   useEffect(() => {
     fetchPlan();
@@ -190,6 +200,15 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLinkGenerating, setShareLinkGenerating] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
+
+  // Escape closes whichever modal is open
+  useEscapeKey(showShareModal, () => setShowShareModal(false));
+  useEscapeKey(showSettingsModal, () => setShowSettingsModal(false));
+  useEscapeKey(showActivityModal, () => setShowActivityModal(false));
+  useEscapeKey(showEditPlanModal, () => setShowEditPlanModal(false));
+  useEscapeKey(showDayPicker, () => setShowDayPicker(false));
 
   const openShareModal = async () => {
     setShowShareModal(true);
@@ -247,7 +266,8 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     try {
       await navigator.clipboard.writeText(url);
       setShareCopied(linkId);
-      setTimeout(() => setShareCopied(null), 2000);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setShareCopied(null), 2000);
     } catch { /* ignore */ }
   };
 
@@ -256,29 +276,24 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     if (!plan || !selectedDayId) return;
 
     try {
+      let res: Response;
       if (editingActivity) {
-        // Update existing
-        await fetch('/api/activities', {
+        res = await fetch('/api/activities', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planId: plan._id,
-            dayId: selectedDayId,
-            activityId: activity.id,
-            updates: activity,
-          }),
+          body: JSON.stringify({ planId: plan._id, dayId: selectedDayId, activityId: activity.id, updates: activity }),
         });
       } else {
-        // Add new
-        await fetch('/api/activities', {
+        res = await fetch('/api/activities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planId: plan._id,
-            dayId: selectedDayId,
-            activity,
-          }),
+          body: JSON.stringify({ planId: plan._id, dayId: selectedDayId, activity }),
         });
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Error saving activity:', body.error ?? res.status);
+        return;
       }
       fetchPlan();
     } catch (error) {
@@ -291,16 +306,16 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     if (!plan || !selectedDayId) return;
 
     try {
-      await fetch('/api/activities', {
+      const res = await fetch('/api/activities', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: plan._id,
-          dayId: selectedDayId,
-          activityId: activity.id,
-          updates: activity,
-        }),
+        body: JSON.stringify({ planId: plan._id, dayId: selectedDayId, activityId: activity.id, updates: activity }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Error updating activity:', body.error ?? res.status);
+        return;
+      }
       fetchPlan();
     } catch (error) {
       console.error('Error updating activity:', error);
@@ -312,9 +327,14 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     if (!plan || !selectedDayId) return;
 
     try {
-      await fetch(`/api/activities?planId=${plan._id}&dayId=${selectedDayId}&activityId=${activityId}`, {
+      const res = await fetch(`/api/activities?planId=${plan._id}&dayId=${selectedDayId}&activityId=${activityId}`, {
         method: 'DELETE',
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Error deleting activity:', body.error ?? res.status);
+        return;
+      }
       fetchPlan();
     } catch (error) {
       console.error('Error deleting activity:', error);
@@ -330,15 +350,16 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
     newActivities.splice(destIndex, 0, removed);
 
     try {
-      await fetch('/api/activities', {
+      const res = await fetch('/api/activities', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: plan._id,
-          dayId: selectedDayId,
-          activities: newActivities,
-        }),
+        body: JSON.stringify({ planId: plan._id, dayId: selectedDayId, activities: newActivities }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('Error reordering activities:', body.error ?? res.status);
+        return;
+      }
       fetchPlan();
     } catch (error) {
       console.error('Error reordering activities:', error);
@@ -493,7 +514,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
       <div className="sticky-top">
         {/* Compact Header */}
         <header className="plan-header">
-          <button onClick={onBack} className="back-btn">
+          <button onClick={onBack} className="back-btn" aria-label="Back to plans">
             <ChevronLeft size={20} />
           </button>
 
@@ -544,6 +565,8 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
                 className={`btn-icon ${showMoreMenu ? 'active' : ''}`}
                 onClick={() => setShowMoreMenu(v => !v)}
                 title="More options"
+                aria-label="More options"
+                aria-expanded={showMoreMenu}
               >
                 <MoreHorizontal size={17} />
               </button>
@@ -855,10 +878,10 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
       {/* Sharing Modal */}
       {showShareModal && (
         <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
-          <div className="modal-content share-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-content share-modal" role="dialog" aria-modal="true" aria-label="Sharing" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Sharing</h3>
-              <button className="close-btn" onClick={() => setShowShareModal(false)}>
+              <button className="close-btn" onClick={() => setShowShareModal(false)} aria-label="Close">
                 <X size={20} />
               </button>
             </div>

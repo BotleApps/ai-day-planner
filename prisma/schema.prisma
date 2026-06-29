@@ -41,7 +41,6 @@ model Plan {
   shareLinks   ShareLink[]
 
   @@index([createdBy])
-  @@index([shareLink])
 }
 
 model DayPlan {
@@ -58,6 +57,8 @@ model DayPlan {
   plan       Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   activities Activity[]
 
+  @@unique([planId, date])
+  @@unique([planId, dayNumber])
   @@index([planId])
 }
 
@@ -117,7 +118,6 @@ model ShareLink {
   plan       Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
   members    SharedAccess[]
 
-  @@index([token])
   @@index([planId])
 }
 
@@ -153,7 +153,6 @@ model Checklist {
 
   @@index([userId])
   @@index([planId])
-  @@index([shareLink])
 }
 
 model ChecklistItem {
@@ -228,7 +227,6 @@ model ChecklistShareLink {
   checklist   Checklist               @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   members     SharedChecklistAccess[]
 
-  @@index([token])
   @@index([checklistId])
 }
 
@@ -248,5 +246,6 @@ model UserSettings {
   // Google Gemini
   geminiApiKeyEnc String   @default("")
   geminiModel     String   @default("")
+  createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

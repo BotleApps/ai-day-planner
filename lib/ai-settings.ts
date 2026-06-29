@@ -26,6 +26,11 @@ export interface AISettings {
   // Google Gemini
   geminiApiKey: string;
   geminiModel: string;
+  // Server-only flags (set from GET response — never sent to server)
+  clientSecretConfigured?: boolean;
+  clientSecretHint?: string | null;
+  geminiApiKeyConfigured?: boolean;
+  geminiApiKeyHint?: string | null;
 }
 
 const STORAGE_KEY = 'ai-day-planner:ai-settings';
@@ -64,11 +69,14 @@ export function saveAISettings(settings: AISettings): void {
 export function isAIConfigured(settings: AISettings): boolean {
   if (!settings.enabled) return false;
   if (settings.provider === 'gemini') {
-    return !!settings.geminiApiKey && !!settings.geminiModel;
+    // Either a fresh key in clientSecret/geminiApiKey field, or a stored configured flag from the server
+    const hasKey = !!settings.geminiApiKey || !!settings.geminiApiKeyConfigured;
+    return hasKey && !!settings.geminiModel;
   }
+  const hasSecret = !!settings.clientSecret || !!settings.clientSecretConfigured;
   return (
     !!settings.clientId &&
-    !!settings.clientSecret &&
+    hasSecret &&
     !!settings.authUrl &&
     !!settings.apiUrl &&
     !!settings.deploymentId
@@ -87,12 +95,32 @@ export async function loadAISettingsFromServer(): Promise<AISettings> {
   }
 }
 
-/** Persist AI settings to the server and update the localStorage cache. */
+/** Persist AI settings to the server and update the localStorage cache.
+ *  Empty clientSecret/geminiApiKey strings are NOT sent — they would erase
+ *  server-stored secrets. Send only when the user types a fresh value.
+ */
 export async function saveAISettingsToServer(settings: AISettings): Promise<void> {
-  saveAISettings(settings); // update local cache immediately
-  await fetch('/api/user-settings', {
+  // Strip empty secrets so the server keeps the existing encrypted value.
+  // Strip server-only flags so they aren't accidentally interpreted as fields.
+  const {
+    clientSecretConfigured: _csc,
+    clientSecretHint: _csh,
+    geminiApiKeyConfigured: _gkc,
+    geminiApiKeyHint: _gkh,
+    ...rest
+  } = settings;
+  const payload: Partial<AISettings> = { ...rest };
+  if (!payload.clientSecret) delete payload.clientSecret;
+  if (!payload.geminiApiKey) delete payload.geminiApiKey;
+
+  const res = await fetch('/api/user-settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(payload),
   });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Settings save failed: ${res.status}`);
+  }
+  saveAISettings(settings); // update local cache only on success
 }

@@ -62,7 +62,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await prisma.sharedAccess.delete({ where: { id: memberId } });
+    await prisma.sharedAccess.deleteMany({ where: { id: memberId, planId } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Error removing member:', error);

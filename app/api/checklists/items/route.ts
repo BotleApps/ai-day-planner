@@ -25,8 +25,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { checklistId, title, groupName, dueDate, notes } = body;
 
-    if (!checklistId || !title) {
+    if (!checklistId || !title || typeof title !== 'string') {
       return NextResponse.json({ error: 'checklistId and title are required' }, { status: 400 });
+    }
+    if (title.length > 500) {
+      return NextResponse.json({ error: 'Title is too long (max 500 chars)' }, { status: 400 });
+    }
+    if (groupName && typeof groupName === 'string' && groupName.length > 100) {
+      return NextResponse.json({ error: 'Group name is too long (max 100 chars)' }, { status: 400 });
+    }
+    if (notes && typeof notes === 'string' && notes.length > 5000) {
+      return NextResponse.json({ error: 'Notes are too long (max 5000 chars)' }, { status: 400 });
     }
 
     if (!(await verifyWriteAccess(checklistId, session.user.id))) {

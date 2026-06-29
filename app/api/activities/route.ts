@@ -32,14 +32,18 @@ function shapeActivity(act: any) {
   };
 }
 
-// Verify read access (owner, active shared access, or public plan)
+// Verify read access (owner or active shared access)
 async function getPlanAccess(planId: string, userId: string) {
-  return prisma.plan.findFirst({
-    where: {
-      id: planId,
-      OR: [{ createdBy: userId }, { isPublic: true }],
-    },
+  const owned = await prisma.plan.findFirst({ where: { id: planId, createdBy: userId } });
+  if (owned) return owned;
+  const access = await prisma.sharedAccess.findUnique({
+    where: { userId_planId: { userId, planId } },
+    include: { shareLink: { select: { isActive: true } } },
   });
+  if (access && (!access.linkId || access.shareLink?.isActive)) {
+    return prisma.plan.findUnique({ where: { id: planId } });
+  }
+  return null;
 }
 
 // Verify write access (owner or active edit-permission shared access)
@@ -261,40 +265,75 @@ export async function PATCH(request: Request) {
 
     // Bulk replace activities if provided
     if (activities) {
-      const ordered: Activity[] = sortByTime(activities).map((a: Activity, i: number) => ({ ...a, order: i }));
+      // Pre-assign IDs to any incoming activity that doesn't have one, so upsert
+      // has a real key to look up (Prisma rejects empty-string id in `where`).
+      const ordered: Activity[] = sortByTime(activities).map((a: Activity, i: number) => ({
+        ...a,
+        id: a.id || generateId(),
+        order: i,
+      }));
 
-      // Delete all existing activities for this day and recreate
-      await prisma.activity.deleteMany({ where: { dayPlanId: dayId } });
-
-      if (ordered.length > 0) {
-        await prisma.activity.createMany({
-          data: ordered.map((a: any) => ({
-            id: a.id || generateId(),
-            dayPlanId: dayId,
-            title: a.title || 'Activity',
-            description: a.description,
-            type: a.type || 'activity',
-            startTime: a.startTime || '09:00',
-            duration: a.duration || 60,
-            endTime: a.endTime,
-            location: a.location,
-            address: a.address,
-            status: a.status || 'planned',
-            priority: a.priority || 'medium',
-            notes: a.notes,
-            cost: a.cost,
-            currency: a.currency,
-            weatherDependent: a.weatherDependent || false,
-            isBreak: a.isBreak || false,
-            aiSuggested: a.aiSuggested || false,
-            order: a.order,
-            color: a.color,
-            icon: a.icon,
-            imageUrl: a.imageUrl,
-            mapsUrl: a.mapsUrl,
-          })),
+      // Atomically replace: keep IDs of incoming activities, delete any not in the set
+      await prisma.$transaction(async (tx) => {
+        const incomingIds = ordered.map((a) => a.id);
+        await tx.activity.deleteMany({
+          where: { dayPlanId: dayId, id: { notIn: incomingIds } },
         });
-      }
+
+        for (const a of ordered as any[]) {
+          await tx.activity.upsert({
+            where: { id: a.id },
+            update: {
+              title: a.title || 'Activity',
+              description: a.description,
+              type: a.type || 'activity',
+              startTime: a.startTime || '09:00',
+              duration: a.duration || 60,
+              endTime: a.endTime,
+              location: a.location,
+              address: a.address,
+              status: a.status || 'planned',
+              priority: a.priority || 'medium',
+              notes: a.notes,
+              cost: a.cost,
+              currency: a.currency,
+              weatherDependent: a.weatherDependent || false,
+              isBreak: a.isBreak || false,
+              aiSuggested: a.aiSuggested || false,
+              order: a.order,
+              color: a.color,
+              icon: a.icon,
+              imageUrl: a.imageUrl,
+              mapsUrl: a.mapsUrl,
+            },
+            create: {
+              id: a.id,
+              dayPlanId: dayId,
+              title: a.title || 'Activity',
+              description: a.description,
+              type: a.type || 'activity',
+              startTime: a.startTime || '09:00',
+              duration: a.duration || 60,
+              endTime: a.endTime,
+              location: a.location,
+              address: a.address,
+              status: a.status || 'planned',
+              priority: a.priority || 'medium',
+              notes: a.notes,
+              cost: a.cost,
+              currency: a.currency,
+              weatherDependent: a.weatherDependent || false,
+              isBreak: a.isBreak || false,
+              aiSuggested: a.aiSuggested || false,
+              order: a.order,
+              color: a.color,
+              icon: a.icon,
+              imageUrl: a.imageUrl,
+              mapsUrl: a.mapsUrl,
+            },
+          });
+        }
+      });
     }
 
     await prisma.plan.update({ where: { id: planId }, data: { updatedAt: new Date() } });

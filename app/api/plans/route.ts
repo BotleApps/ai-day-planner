@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { DEFAULT_PREFERENCES } from '@/lib/types';
-import { generateId, getDatesBetween } from '@/lib/utils';
+import { generateId, generateShareToken, getDatesBetween } from '@/lib/utils';
 import { auth } from '@/auth';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 // Helper: shape a raw Prisma plan row back into the Plan shape the frontend expects
 function shapePlan(plan: any) {
@@ -94,6 +95,14 @@ export async function GET(request: Request) {
 
     // Share link branch — no auth required for view
     if (shareToken) {
+      // Rate-limit unauthenticated lookups by IP to prevent token brute-forcing
+      const rl = rateLimit(`share:${getClientIp({ headers: request.headers })}`, 60, 60_000);
+      if (!rl.ok) {
+        return NextResponse.json(
+          { error: 'Too many requests.' },
+          { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+        );
+      }
       // Try new ShareLink table first
       const shareLink = await prisma.shareLink.findUnique({
         where: { token: shareToken },
@@ -212,7 +221,26 @@ export async function GET(request: Request) {
 
     const plans = await prisma.plan.findMany({
       where: { createdBy: userId },
-      include: { days: { include: DAY_INCLUDE } },
+      select: {
+        id: true, title: true, description: true, destination: true, coverImage: true,
+        status: true, startDate: true, endDate: true, createdBy: true, createdAt: true,
+        updatedAt: true, isPublic: true, shareLink: true,
+        wakeUpTime: true, sleepTime: true, pace: true, breakFrequency: true,
+        breakDuration: true, travelBuffer: true, mealBreakfast: true, mealLunch: true,
+        mealDinner: true, activityTypes: true, accessibility: true,
+        dietaryRestrictions: true, interests: true,
+        days: {
+          select: {
+            id: true, date: true, dayNumber: true, title: true, notes: true,
+            // For list/card view: only the fields home-page renders (count + completion %).
+            activities: {
+              select: { id: true, status: true },
+              orderBy: { order: 'asc' },
+            },
+          },
+          orderBy: { dayNumber: 'asc' },
+        },
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return NextResponse.json({ plans: plans.map(shapePlan) });
@@ -235,6 +263,21 @@ export async function POST(request: Request) {
 
     if (!title || !startDate || !endDate) {
       return NextResponse.json({ error: 'Title, start date, and end date are required' }, { status: 400 });
+    }
+    if (typeof title !== 'string' || title.length > 200) {
+      return NextResponse.json({ error: 'Title is invalid (max 200 chars)' }, { status: 400 });
+    }
+    if (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      return NextResponse.json({ error: 'startDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+    if (typeof endDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return NextResponse.json({ error: 'endDate must be in YYYY-MM-DD format' }, { status: 400 });
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      return NextResponse.json({ error: 'endDate must be on or after startDate' }, { status: 400 });
+    }
+    if (description && typeof description === 'string' && description.length > 10000) {
+      return NextResponse.json({ error: 'Description is too long (max 10000 chars)' }, { status: 400 });
     }
 
     const prefs = { ...DEFAULT_PREFERENCES, ...preferences };
@@ -306,9 +349,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ plan: shapePlan(plan) });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('Error creating plan:', msg);
-    return NextResponse.json({ error: `Failed to create plan: ${msg}` }, { status: 500 });
+    console.error('Error creating plan:', error);
+    return NextResponse.json({ error: 'Failed to create plan' }, { status: 500 });
   }
 }
 
@@ -339,28 +381,29 @@ export async function PUT(request: Request) {
       const dates = getDatesBetween(newStart, newEnd);
       const existingByDate = new Map(existing.days.map((d: any) => [d.date, d]));
 
-      // Delete days that no longer fall in range
-      await prisma.dayPlan.deleteMany({
-        where: { planId: id, date: { notIn: dates } },
-      });
+      await prisma.$transaction(async (tx) => {
+        // Delete days that no longer fall in range
+        await tx.dayPlan.deleteMany({
+          where: { planId: id, date: { notIn: dates } },
+        });
 
-      // Create any new dates
-      const existingDates = new Set(existing.days.map((d: any) => d.date));
-      for (let i = 0; i < dates.length; i++) {
-        const date = dates[i];
-        if (!existingDates.has(date)) {
-          await prisma.dayPlan.create({
-            data: { id: generateId(), planId: id, date, dayNumber: i + 1 },
-          });
-        } else {
-          // Update dayNumber in case order shifted
-          const day = existingByDate.get(date) as any;
-          await prisma.dayPlan.update({
-            where: { id: day.id },
-            data: { dayNumber: i + 1 },
-          });
+        // Create or update day numbers for each date in range
+        const existingDates = new Set(existing.days.map((d: any) => d.date));
+        for (let i = 0; i < dates.length; i++) {
+          const date = dates[i];
+          if (!existingDates.has(date)) {
+            await tx.dayPlan.create({
+              data: { id: generateId(), planId: id, date, dayNumber: i + 1 },
+            });
+          } else {
+            const day = existingByDate.get(date) as any;
+            await tx.dayPlan.update({
+              where: { id: day.id },
+              data: { dayNumber: i + 1 },
+            });
+          }
         }
-      }
+      });
       updates.startDate = newStart;
       updates.endDate = newEnd;
     }
@@ -401,24 +444,23 @@ export async function PATCH(request: Request) {
     });
     if (!plan) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
 
-    // Ensure a view ShareLink exists
+    // Ensure a view ShareLink exists — use a consistent token
     const existingLink = await prisma.shareLink.findFirst({
       where: { planId: id, permission: 'view', isActive: true },
     });
-    const token = existingLink?.token ?? (() => {
-      const t = generateId();
-      return t;
-    })();
 
-    if (!existingLink) {
-      await prisma.shareLink.create({
-        data: { id: generateId(), planId: id, token, permission: 'view', isActive: true },
-      });
+    let token: string;
+    if (existingLink) {
+      token = existingLink.token;
+    } else {
+      token = generateShareToken();
+      await prisma.$transaction([
+        prisma.shareLink.create({
+          data: { id: generateId(), planId: id, token, permission: 'view', isActive: true },
+        }),
+        prisma.plan.update({ where: { id }, data: { shareLink: token, isPublic: true } }),
+      ]);
     }
-
-    // Keep Plan.shareLink in sync for backward compat
-    const shareLink = plan.shareLink ?? token;
-    await prisma.plan.update({ where: { id }, data: { shareLink, isPublic: true } });
 
     return NextResponse.json({ shareLink: token });
   } catch (error) {

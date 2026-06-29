@@ -1,9 +1,16 @@
 name: Build iOS
 
 # Builds (and optionally signs) the Capacitor iOS app.
-# The native `ios/` project is generated on the fly with `cap add`, so it does
-# not need to be committed. Code signing requires Apple Developer secrets; when
-# they are absent the job still produces an unsigned archive for verification.
+# Triggers:
+#   - Tag matching `ios-v*` or `v*` → release archive (signed if secrets present).
+#   - Manual via "Run workflow" → optional CAP_SERVER_URL override.
+#   - On `ios/`, `mobile/`, `capacitor.config.ts` changes touching main →
+#     unsigned verification build only.
+#
+# Required secrets (signed release builds):
+#   IOS_CERTIFICATE_BASE64, IOS_CERTIFICATE_PASSWORD,
+#   IOS_PROVISIONING_PROFILE_BASE64, IOS_PROVISIONING_PROFILE_NAME,
+#   IOS_TEAM_ID, CAP_SERVER_URL
 on:
   workflow_dispatch:
     inputs:
@@ -14,11 +21,24 @@ on:
     tags:
       - 'ios-v*'
       - 'v*'
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'mobile/**'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-ios.yml'
+
+concurrency:
+  group: build-ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ios:
     name: Build iOS app
     runs-on: macos-14
+    timeout-minutes: 60
     env:
       CAP_SERVER_URL: ${{ github.event.inputs.server_url || secrets.CAP_SERVER_URL }}
     steps:

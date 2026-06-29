@@ -10,6 +10,7 @@ import {
 } from '@/lib/types';
 import { ChecklistItemRow } from './checklist-item-row';
 import { ConfirmDialog } from './confirm-dialog';
+import { useEscapeKey } from '@/lib/use-escape-key';
 import {
   ArrowLeft, Share2, Plus, Copy, Check, AlertCircle,
   Edit2, MoreHorizontal, Trash2, X, Link2, Users, LayoutTemplate,
@@ -79,10 +80,17 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLinkGenerating, setShareLinkGenerating] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   const isOwner = userPermission === 'owner';
   const isEditable = userPermission === 'owner' || userPermission === 'edit';
   const isUnauthenticatedViewer = !!shareToken && status === 'unauthenticated';
+
+  // Escape closes whichever modal is open
+  useEscapeKey(showShareModal, () => setShowShareModal(false));
+  useEscapeKey(showEditModal, () => setShowEditModal(false));
+  useEscapeKey(showTemplateModal, () => setShowTemplateModal(false));
 
   useEffect(() => {
     const url = shareToken
@@ -109,32 +117,34 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
   // ── Item handlers ────────────────────────────────────────────────────────────
   const handleToggle = async (id: string, completed: boolean) => {
     if (!checklist || !isEditable) return;
-    setChecklist((prev) =>
-      prev ? { ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, completed } : i)) } : null,
-    );
-    await fetch('/api/checklists/items', {
+    const prev = checklist;
+    setChecklist((c) => c ? { ...c, items: c.items.map((i) => (i.id === id ? { ...i, completed } : i)) } : null);
+    const res = await fetch('/api/checklists/items', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, checklistId: checklist.id, completed }),
     });
+    if (!res.ok) setChecklist(prev);
   };
 
   const handleUpdateItem = async (id: string, fields: Partial<ChecklistItem>) => {
     if (!checklist || !isEditable) return;
-    setChecklist((prev) =>
-      prev ? { ...prev, items: prev.items.map((i) => (i.id === id ? { ...i, ...fields } : i)) } : null,
-    );
-    await fetch('/api/checklists/items', {
+    const prev = checklist;
+    setChecklist((c) => c ? { ...c, items: c.items.map((i) => (i.id === id ? { ...i, ...fields } : i)) } : null);
+    const res = await fetch('/api/checklists/items', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, checklistId: checklist.id, ...fields }),
     });
+    if (!res.ok) setChecklist(prev);
   };
 
   const handleDeleteItem = async (id: string) => {
     if (!checklist || !isEditable) return;
-    setChecklist((prev) => (prev ? { ...prev, items: prev.items.filter((i) => i.id !== id) } : null));
-    await fetch(`/api/checklists/items?id=${id}&checklistId=${checklist.id}`, { method: 'DELETE' });
+    const prev = checklist;
+    setChecklist((c) => (c ? { ...c, items: c.items.filter((i) => i.id !== id) } : null));
+    const res = await fetch(`/api/checklists/items?id=${id}&checklistId=${checklist.id}`, { method: 'DELETE' });
+    if (!res.ok) setChecklist(prev);
   };
 
   const handleAddItem = async (groupOverride?: string) => {
@@ -365,7 +375,8 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
     try {
       await navigator.clipboard.writeText(url);
       setShareCopied(linkId);
-      setTimeout(() => setShareCopied(null), 2000);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setShareCopied(null), 2000);
     } catch {
       /* ignore */
     }
@@ -717,10 +728,10 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       {/* ── Edit metadata modal ─────────────────────────────────────────────── */}
       {showEditModal && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Edit checklist" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>Edit checklist</h3>
-              <button className="modal-close" onClick={() => setShowEditModal(false)}>
+              <button className="modal-close" onClick={() => setShowEditModal(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -780,10 +791,10 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       {/* ── Save as template modal ──────────────────────────────────────────── */}
       {showTemplateModal && (
         <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-label="Save as template" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>Save as template</h3>
-              <button className="modal-close" onClick={() => setShowTemplateModal(false)}>
+              <button className="modal-close" onClick={() => setShowTemplateModal(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
@@ -864,10 +875,10 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       {/* ── Share modal ─────────────────────────────────────────────────────── */}
       {showShareModal && (
         <div className="modal-overlay" onClick={() => setShowShareModal(false)}>
-          <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card share-modal" role="dialog" aria-modal="true" aria-label="Sharing" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>Sharing</h3>
-              <button className="modal-close" onClick={() => setShowShareModal(false)}>
+              <button className="modal-close" onClick={() => setShowShareModal(false)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Activity, DayPlan, PlanPreferences, ACTIVITY_ICONS } from '@/lib/types';
 import { generateId, formatDuration } from '@/lib/utils';
-import { loadAISettings, loadAISettingsFromServer, saveAISettings, isAIConfigured } from '@/lib/ai-settings';
+import { loadAISettingsFromServer, isAIConfigured } from '@/lib/ai-settings';
 import {
   Sparkles,
   Send,
@@ -63,10 +63,7 @@ export function AIPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const local = loadAISettings();
-    setAiConfigured(isAIConfigured(local));
     loadAISettingsFromServer().then(serverSettings => {
-      saveAISettings(serverSettings);
       setAiConfigured(isAIConfigured(serverSettings));
     });
   }, []);
@@ -80,18 +77,11 @@ export function AIPanel({
   }, [messages]);
 
   const callAI = async (prompt: string): Promise<{ message: string; suggestions: Partial<Activity>[] }> => {
-    const settings = loadAISettings();
-
-    if (!isAIConfigured(settings)) {
-      throw new Error('not_configured');
-    }
-
     const resp = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: prompt,
-        settings,
         context: {
           destination,
           date: day.date,
@@ -104,6 +94,9 @@ export function AIPanel({
     const data = await resp.json();
 
     if (!resp.ok) {
+      if (resp.status === 400 && data.error?.includes('not configured')) {
+        throw new Error('not_configured');
+      }
       throw new Error(data.error || `HTTP ${resp.status}`);
     }
 
@@ -160,46 +153,42 @@ export function AIPanel({
 
   const handleQuickPrompt = (prompt: string) => {
     setInput(prompt);
-    // Use a small delay so the input value is set before handleSend reads it
-    setTimeout(() => {
-      setMessages(prev => [
-        ...prev,
-        { id: generateId(), role: 'user', content: prompt, timestamp: new Date() },
-      ]);
-      setInput('');
-      setIsLoading(true);
+    setMessages(prev => [
+      ...prev,
+      { id: generateId(), role: 'user', content: prompt, timestamp: new Date() },
+    ]);
+    setIsLoading(true);
 
-      callAI(prompt)
-        .then(response => {
-          setMessages(prev => [
-            ...prev,
-            {
-              id: generateId(),
-              role: 'assistant',
-              content: response.message,
-              suggestions: response.suggestions,
-              timestamp: new Date(),
-            },
-          ]);
-        })
-        .catch(error => {
-          const isNotConfigured = error instanceof Error && error.message === 'not_configured';
-          setMessages(prev => [
-            ...prev,
-            {
-              id: generateId(),
-              role: 'assistant',
-              content: isNotConfigured
-                ? 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.'
-                : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
-              timestamp: new Date(),
-            },
-          ]);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    }, 50);
+    callAI(prompt)
+      .then(response => {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: response.message,
+            suggestions: response.suggestions,
+            timestamp: new Date(),
+          },
+        ]);
+      })
+      .catch(error => {
+        const isNotConfigured = error instanceof Error && error.message === 'not_configured';
+        setMessages(prev => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: isNotConfigured
+              ? 'AI is not configured. Go to Settings → Intelligence to set up your AI provider.'
+              : `Sorry, I couldn't get a response. ${error instanceof Error ? error.message : 'Please try again.'}`,
+            timestamp: new Date(),
+          },
+        ]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   const handleAddSuggestion = (suggestion: Partial<Activity>) => {

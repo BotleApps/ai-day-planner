@@ -1,0 +1,55 @@
+version: 2
+updates:
+  # Node dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    groups:
+      # Group all minor/patch updates into one PR to reduce review burden
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+      # Major updates get their own PRs — they often need code changes
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+      include: scope
+
+  # GitHub Actions versions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+
+  # iOS Pods
+  - package-ecosystem: bundler
+    directory: /ios/App
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ios
+    open-pull-requests-limit: 3
+
+  # Android Gradle (will activate once android/ is scaffolded)
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - android
+    open-pull-requests-limit: 3
