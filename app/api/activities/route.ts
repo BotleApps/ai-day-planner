@@ -4,7 +4,32 @@ import { Activity } from '@/lib/types';
 import { generateId, sortByTime } from '@/lib/utils';
 import { auth } from '@/auth';
 
-function shapeActivity(act: any) {
+type ActivityRow = {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: string;
+  startTime: string;
+  duration: number;
+  endTime?: string | null;
+  location?: string | null;
+  address?: string | null;
+  status: string;
+  priority: string;
+  notes?: string | null;
+  cost?: number | null;
+  currency?: string | null;
+  weatherDependent: boolean;
+  isBreak: boolean;
+  aiSuggested: boolean;
+  order: number;
+  color?: string | null;
+  icon?: string | null;
+  imageUrl?: string | null;
+  mapsUrl?: string | null;
+};
+
+function shapeActivity(act: ActivityRow) {
   return {
     _id: act.id,
     id: act.id,
@@ -82,7 +107,11 @@ export async function GET(request: Request) {
     });
     if (!day) return NextResponse.json({ error: 'Day not found' }, { status: 404 });
 
-    return NextResponse.json({ activities: sortByTime(day.activities.map(shapeActivity)) });
+    // sortByTime only reads startTime — the shaped rows are Activity-like
+     // enough for the sort, even though their `type` narrows to string here.
+    return NextResponse.json({
+      activities: sortByTime(day.activities.map(shapeActivity) as unknown as Activity[]),
+    });
   } catch (error) {
     console.error('Error fetching activities:', error);
     return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 });
@@ -174,7 +203,7 @@ export async function PUT(request: Request) {
     }
 
     // Build safe update object (only known scalar fields)
-    const data: Record<string, any> = {};
+    const data: Record<string, unknown> = {};
     const allowed = [
       'title', 'description', 'type', 'startTime', 'duration', 'endTime',
       'location', 'address', 'status', 'priority', 'notes', 'cost',
@@ -280,7 +309,7 @@ export async function PATCH(request: Request) {
           where: { dayPlanId: dayId, id: { notIn: incomingIds } },
         });
 
-        for (const a of ordered as any[]) {
+        for (const a of ordered) {
           await tx.activity.upsert({
             where: { id: a.id },
             update: {

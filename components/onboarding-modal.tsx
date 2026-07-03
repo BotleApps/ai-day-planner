@@ -139,7 +139,14 @@ export function OnboardingModal() {
           width: 100%;
           max-width: 480px;
           border-radius: 28px 28px 0 0;
-          overflow: hidden;
+          /* Bound to dvh so long copy on short screens can scroll internally.
+             The .actions footer uses position:sticky so Next/Skip stay
+             pinned to the visible bottom regardless of content height.
+             Safe-area-top keeps the sheet clear of the notch. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
           position: relative;
         }
         .modal-enter { animation: slide-up 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
@@ -256,13 +263,20 @@ export function OnboardingModal() {
           background: var(--primary);
         }
 
-        /* Actions */
+        /* Actions — sticky so Skip/Next stay pinned to the visible bottom
+           when the modal scrolls; safe-area padding clears the iOS home
+           indicator. */
         .actions {
+          position: sticky;
+          bottom: 0;
+          z-index: 2;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 20px 24px 32px;
+          padding: 16px 24px calc(24px + env(safe-area-inset-bottom, 0px));
           gap: 12px;
+          background: var(--card);
+          border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
         }
         .skip-btn {
           padding: 10px 18px;

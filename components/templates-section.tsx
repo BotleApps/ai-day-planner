@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  LayoutTemplate, Plus, Globe, User,
+  LayoutTemplate, Globe, User,
   Trash2, Upload, CheckCircle2, MoreVertical, BookOpen, Share2, Check,
 } from 'lucide-react';
 

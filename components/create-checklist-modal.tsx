@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AIChecklistGenerationResult } from '@/lib/types';
 import {
-  Plus, X, Sparkles, LayoutTemplate, PenLine, Check,
+  X, Sparkles, LayoutTemplate, PenLine, Check,
   Search, ArrowLeft,
 } from 'lucide-react';
 
@@ -476,7 +476,10 @@ export default function CreateChecklistModal({
           touch-action: none;
         }
         .sheet {
-          width: 100%; max-height: 92vh;
+          width: 100%;
+          /* dvh + safe-area so the sheet respects notch/home indicator and
+             shrinks when the iOS keyboard opens (keeping the footer visible). */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
           background: var(--background);
           border-radius: 20px 20px 0 0;
           display: flex; flex-direction: column;
@@ -520,9 +523,15 @@ export default function CreateChecklistModal({
         .mode-card h3 { font-size: 15px; font-weight: 700; margin: 0 0 3px; color: var(--foreground); }
         .mode-card p { font-size: 13px; color: var(--muted-foreground); margin: 0; }
 
-        /* Form body */
+        /* Form body — min-height: 0 is required so this flex child can
+           actually shrink below its content height and let the footer stay
+           pinned. Without it, long AI-generated preview lists push the
+           Cancel / Save buttons off-screen. */
         .form-body {
-          flex: 1; overflow-y: scroll; padding: 16px;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 16px;
           display: flex; flex-direction: column; gap: 10px;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior: contain;
@@ -633,10 +642,13 @@ export default function CreateChecklistModal({
         }
         .excluded .item-toggle { background: transparent; border-color: var(--border); }
 
-        /* Footer */
+        /* Footer — flex-none so it's never pushed off-screen; safe-area
+           padding clears the iOS home indicator. */
         .footer {
           display: flex; gap: 10px; justify-content: flex-end;
-          padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0;
+          padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+          border-top: 1px solid var(--border); flex-shrink: 0;
+          background: var(--background);
         }
         .cancel-btn {
           padding: 11px 20px; border-radius: 10px; border: 1px solid var(--border);

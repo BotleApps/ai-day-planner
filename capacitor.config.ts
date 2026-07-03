@@ -19,7 +19,12 @@ const config: CapacitorConfig = {
   appId: 'com.sortedplan.app',
   appName: 'SortedPlan',
   webDir: 'mobile/www',
-  backgroundColor: '#0f0f23',
+  // Match the web app's light --background so any native chrome that briefly
+  // shows during launch handoff blends into the page instead of appearing as
+  // a black bar. The dark-mode user briefly sees light before React applies
+  // .dark — acceptable trade-off; otherwise we'd need to mirror the system
+  // colour scheme natively, which Capacitor doesn't support out of the box.
+  backgroundColor: '#f8fafc',
   ...(serverUrl
     ? {
         server: {
@@ -30,11 +35,16 @@ const config: CapacitorConfig = {
       }
     : {}),
   ios: {
-    backgroundColor: '#0f0f23',
-    contentInset: 'always',
+    backgroundColor: '#f8fafc',
+    // 'never' makes WKWebView extend edge-to-edge instead of being inset
+    // inside the safe area. Components already pad for env(safe-area-inset-*)
+    // (see .mw in mobile-welcome.tsx, plan-view, ai-panel, etc.), so the DOM
+    // paints its own var(--background) into the safe-area strips — no more
+    // black bars above the status bar or below the home indicator.
+    contentInset: 'never',
   },
   android: {
-    backgroundColor: '#0f0f23',
+    backgroundColor: '#f8fafc',
   },
   plugins: {
     SplashScreen: {
@@ -45,7 +55,9 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_CROP',
     },
     StatusBar: {
-      overlaysWebView: false,
+      // Let the webview render under the status bar; the page's
+      // env(safe-area-inset-top) padding reserves the right amount of space.
+      overlaysWebView: true,
       style: 'DARK',
     },
     Keyboard: {

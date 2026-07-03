@@ -74,7 +74,7 @@ export default function TemplatePage() {
   const toggleGroup = (g: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
-      next.has(g) ? next.delete(g) : next.add(g);
+      if (next.has(g)) next.delete(g); else next.add(g);
       return next;
     });
   };
@@ -209,7 +209,7 @@ export default function TemplatePage() {
 
       <style jsx>{`
         .page {
-          min-height: 100vh;
+          min-height: 100dvh;
           background: var(--background);
           padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
         }
@@ -312,12 +312,15 @@ export default function TemplatePage() {
           background: var(--primary); opacity: 0.6; flex-shrink: 0;
         }
 
-        /* CTA bar */
+        /* CTA bar — the button always sits above the home indicator because
+           we pad by max(base, env(safe-area-inset-bottom)). The max() call
+           guarantees a minimum floor (16px) so devices where env() returns 0
+           still keep the button comfortably off the bottom edge. */
         .cta-bar {
           position: fixed;
           bottom: 0; left: 0; right: 0;
           display: flex; gap: 10px;
-          padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+          padding: 12px 16px max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px));
           background: var(--background);
           border-top: 1px solid var(--border);
           z-index: 10;

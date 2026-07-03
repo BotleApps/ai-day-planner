@@ -102,14 +102,12 @@ export async function loadAISettingsFromServer(): Promise<AISettings> {
 export async function saveAISettingsToServer(settings: AISettings): Promise<void> {
   // Strip empty secrets so the server keeps the existing encrypted value.
   // Strip server-only flags so they aren't accidentally interpreted as fields.
-  const {
-    clientSecretConfigured: _csc,
-    clientSecretHint: _csh,
-    geminiApiKeyConfigured: _gkc,
-    geminiApiKeyHint: _gkh,
-    ...rest
-  } = settings;
-  const payload: Partial<AISettings> = { ...rest };
+  const rest: Partial<AISettings> = { ...settings };
+  delete rest.clientSecretConfigured;
+  delete rest.clientSecretHint;
+  delete rest.geminiApiKeyConfigured;
+  delete rest.geminiApiKeyHint;
+  const payload: Partial<AISettings> = rest;
   if (!payload.clientSecret) delete payload.clientSecret;
   if (!payload.geminiApiKey) delete payload.geminiApiKey;
 

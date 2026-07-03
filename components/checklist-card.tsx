@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { Checklist } from '@/lib/types';
 import { MoreVertical, Calendar, CheckSquare, Share2, Trash2, Link2 } from 'lucide-react';
 

@@ -2,11 +2,10 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Activity, ActivityType, DayPlan } from '@/lib/types';
+import { Activity, DayPlan } from '@/lib/types';
 import {
   parseTime,
   formatTime,
-  addMinutes,
   calculateEndTime,
   getActivityColor,
   getActivityIcon,
@@ -14,23 +13,17 @@ import {
   cn,
 } from '@/lib/utils';
 import {
-  GripVertical,
   Clock,
   MapPin,
-  MoreHorizontal,
   Check,
   X,
   SkipForward,
-  ArrowRight,
   Play,
-  Coffee,
   Plus,
   Edit3,
   Trash2,
-  Pause,
   RotateCcw,
   ExternalLink,
-  Image as ImageIcon,
 } from 'lucide-react';
 
 interface TimelineProps {
@@ -52,7 +45,6 @@ export function Timeline({
   day,
   onActivityUpdate,
   onActivityDelete,
-  onActivityReorder,
   onAddActivity,
   onEditActivity,
   isEditable = true,
@@ -179,7 +171,7 @@ export function Timeline({
               </div>
             ))}
           </div>
-          {day.activities.map((activity, index) => {
+          {day.activities.map((activity) => {
             const top = getPositionForTime(activity.startTime);
             const height = (activity.duration / 60) * HOUR_HEIGHT;
             const endTime = calculateEndTime(activity);
@@ -247,6 +239,7 @@ export function Timeline({
 
                   {activity.imageUrl && height > 80 && (
                     <div className="activity-image-thumb">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied URL; next/image would require host allowlist */}
                       <img src={activity.imageUrl} alt={activity.title} />
                     </div>
                   )}
@@ -321,7 +314,20 @@ export function Timeline({
           position: relative;
           background: var(--card);
           border-radius: 16px;
+          /* overflow: hidden preserves the card's rounded corners but
+             clipped the box-shadow of activity cards positioned near the
+             bottom hour. isolation:isolate creates a stacking context
+             that lets the outer plan-view scroller absorb the shadow. */
           overflow: hidden;
+          isolation: isolate;
+        }
+
+        /* Absorb the last activity's box-shadow by extending the timeline
+           a few px below its content so it isn't clipped at the border. */
+        .timeline::after {
+          content: '';
+          display: block;
+          height: 12px;
         }
 
         .timeline {
@@ -663,6 +669,7 @@ export function ActivityDetailPopup({
   const color = getActivityColor(activity.type);
   const icon = getActivityIcon(activity.type);
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- gating portal render on client mount; runs once
   useEffect(() => { setMounted(true); }, []);
 
   const statusActions = [
@@ -690,6 +697,7 @@ export function ActivityDetailPopup({
         <div className="popup-body">
           {activity.imageUrl && (
             <div className="popup-image">
+              {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied URL; next/image would require host allowlist */}
               <img src={activity.imageUrl} alt={activity.title} />
             </div>
           )}

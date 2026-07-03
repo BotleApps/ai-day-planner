@@ -685,7 +685,9 @@ export default function IntelligencePage() {
           max-width: 540px;
           width: 100%;
           margin: 0 auto;
-          padding: 24px 20px 56px;
+          /* Safe-area bottom padding so the last field/save button clears
+             the iOS home indicator on notched devices. */
+          padding: 24px 20px calc(56px + env(safe-area-inset-bottom, 0px));
         }
 
         /* Provider tabs */
@@ -971,11 +973,16 @@ export default function IntelligencePage() {
           border-radius: 50%;
           flex-shrink: 0;
         }
-        .model-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .model-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
         .model-name {
           font-size: 13px;
           font-weight: 600;
           color: var(--foreground);
+          /* max-width:100% + min-width:0 on the flex parent lets the
+             ellipsis actually take effect when the parent has no explicit
+             width — otherwise long model names push the row wider than the
+             card and clip at the container edge instead. */
+          max-width: 100%;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1012,7 +1019,7 @@ export default function IntelligencePage() {
         }
 
         @media (max-width: 480px) {
-          .scroll { padding: 20px 16px 48px; }
+          .scroll { padding: 20px 16px calc(48px + env(safe-area-inset-bottom, 0px)); }
         }
 
         /* ── Provider selection screen ─────────────── */

@@ -1,18 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Plan, DEFAULT_PREFERENCES, PlanPreferences } from '@/lib/types';
-import { generateId, getDatesBetween, formatDate } from '@/lib/utils';
+import { useState } from 'react';
+import { DEFAULT_PREFERENCES, PlanPreferences } from '@/lib/types';
+import { getDatesBetween } from '@/lib/utils';
 import {
   X,
   Calendar,
   MapPin,
-  Clock,
-  Image as ImageIcon,
   Sparkles,
   ChevronRight,
   ChevronLeft,
-  Check,
   Sun,
   Moon,
   Coffee,
@@ -376,7 +373,11 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           border-radius: 24px 24px 0 0;
           width: 100%;
           max-width: 100%;
-          max-height: 92dvh;
+          /* Subtract the top safe-area so the sheet never extends under the
+             notch/Dynamic Island; the sticky .modal-actions footer already
+             pads for env(safe-area-inset-bottom). Use dvh so the sheet
+             shrinks when the iOS keyboard appears, keeping the CTA visible. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -696,7 +697,7 @@ export function CreatePlanModal({ isOpen, onClose, onPlanCreated }: CreatePlanMo
           .modal-content {
             border-radius: 24px;
             max-width: 480px;
-            max-height: 90vh;
+            max-height: 90dvh;
           }
 
           .step-content {

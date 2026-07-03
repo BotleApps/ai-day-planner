@@ -8,6 +8,7 @@ export function OfflineBanner() {
   const [showReturnedOnline, setShowReturnedOnline] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing navigator.onLine (browser API) into React state on mount
     setIsOffline(!navigator.onLine);
 
     const handleOffline = () => {

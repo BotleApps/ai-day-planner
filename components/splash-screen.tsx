@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export function SplashScreen() {
   const [phase, setPhase] = useState<'hold' | 'out' | 'done'>('hold');
@@ -8,6 +9,7 @@ export function SplashScreen() {
   useEffect(() => {
     // Only show once per browser session
     if (sessionStorage.getItem('sp:splashed')) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating phase from sessionStorage (client-only) requires effect
       setPhase('done');
       return;
     }
@@ -24,7 +26,7 @@ export function SplashScreen() {
     <div className={`splash splash-${phase}`} aria-hidden="true">
       <div className="splash-content">
         <div className="splash-icon">
-          <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={52} height={52} />
+          <Image src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={52} height={52} />
         </div>
         <div className="splash-wordmark">
           Sorted<strong>Plan</strong>

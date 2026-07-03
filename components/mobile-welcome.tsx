@@ -73,7 +73,7 @@ export function MobileWelcome() {
     } catch {
       /* ignore */
     }
-    setPhase(onboarded ? 'login' : 'onboarding');
+    setPhase(onboarded ? 'login' : 'onboarding'); // eslint-disable-line react-hooks/set-state-in-effect -- hydrating phase from localStorage on mount
   }, []);
 
   const completeOnboarding = () => {

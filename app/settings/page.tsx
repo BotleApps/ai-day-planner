@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [aiBackend, setAiBackend] = useState('');
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrating settings from localStorage/server on mount */
     setMounted(true);
     // Load from localStorage immediately (no flash)
     const local = loadAISettings();
@@ -36,6 +37,7 @@ export default function SettingsPage() {
     setAiConfigured(isAIConfigured(local));
     setAiModelName(local.modelName || local.deploymentId || '');
     setAiBackend(local.backend || '');
+    /* eslint-enable react-hooks/set-state-in-effect */
     // Sync from server (authoritative cross-device)
     loadAISettingsFromServer().then(s => {
       if (s.clientId || s.deploymentId) {

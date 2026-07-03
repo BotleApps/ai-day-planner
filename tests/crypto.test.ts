@@ -47,7 +47,9 @@ describe('lib/crypto', () => {
   it('returns "" when the auth tag is tampered with', async () => {
     const { encrypt, decrypt } = await import('../lib/crypto');
     const ct = encrypt('hello');
-    const [iv, _tag, body] = ct.split(':');
+    const parts = ct.split(':');
+    const iv = parts[0];
+    const body = parts[2];
     const tampered = `${iv}:${'00'.repeat(16)}:${body}`;
     expect(decrypt(tampered)).toBe('');
   });

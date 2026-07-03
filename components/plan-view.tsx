@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import { Plan, DayPlan, Activity, ACTIVITY_COLORS, ACTIVITY_ICONS } from '@/lib/types';
 import { formatDate, calculateDayProgress, formatDuration } from '@/lib/utils';
@@ -200,7 +200,7 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLinkGenerating, setShareLinkGenerating] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   // Escape closes whichever modal is open
@@ -1796,14 +1796,18 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         }
 
         .fab-add {
-          bottom: 24px;
+          /* Safe-area is baked into the base rule (0px fallback) so devices
+             that don't advertise env() support still get the fix — the
+             previous @supports gate silently hid FABs behind the home
+             indicator on older WebViews. */
+          bottom: calc(24px + env(safe-area-inset-bottom, 0px));
           right: 24px;
           background: var(--primary);
           color: white;
         }
 
         .fab-ai {
-          bottom: 24px;
+          bottom: calc(24px + env(safe-area-inset-bottom, 0px));
           right: 92px;
           background: linear-gradient(135deg, #8b5cf6, #ec4899);
           color: white;
@@ -1834,7 +1838,9 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         .ai-modal {
           width: 100%;
           max-width: 480px;
-          max-height: 80vh;
+          /* dvh so the sheet shrinks when the iOS keyboard opens; safe-area
+             keeps it clear of the notch. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
           background: var(--card);
           border-radius: 20px 20px 0 0;
           overflow: hidden;
@@ -1911,10 +1917,14 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         .modal-content {
           width: 100%;
           max-width: 400px;
-          max-height: 80vh;
+          /* Flex column + dvh + safe-area so long member/share lists don't
+             push the CTA buttons out of view. Body scrolls, footer stays. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
           background: var(--card);
           border-radius: 20px 20px 0 0;
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
           animation: slideUp 0.3s ease;
         }
 
@@ -1933,8 +1943,14 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         }
 
         .modal-body {
+          /* Fill remaining space and scroll internally; min-height: 0 lets
+             this flex child actually shrink below its content, which is
+             required for the sticky header/footer pattern to work. */
+          flex: 1 1 auto;
+          min-height: 0;
           padding: 20px;
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
         }
 
         /* Share Modal */
@@ -2234,7 +2250,10 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
 
         .day-picker-list {
           overflow-y: auto;
-          max-height: 60vh;
+          -webkit-overflow-scrolling: touch;
+          /* dvh so long day lists don't extend below the visible area on
+             short/keyboard-open viewports. */
+          max-height: 60dvh;
           padding: 8px 0;
         }
 
@@ -2358,12 +2377,9 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
           }
         }
 
-        /* Safe area for mobile */
-        @supports (padding-bottom: env(safe-area-inset-bottom)) {
-          .fab-add, .fab-ai {
-            bottom: calc(24px + env(safe-area-inset-bottom));
-          }
-        }
+        /* Safe area is now baked into the base .fab-add / .fab-ai rules
+           above (with a 0px fallback) rather than gated behind @supports,
+           which was skipped on some older iOS Capacitor WebViews. */
 
         /* Edit Plan modal */
         .edit-overlay {
@@ -2375,7 +2391,10 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         .edit-modal {
           background: var(--card); border: 1px solid var(--border);
           border-radius: 18px; width: 100%; max-width: 440px;
-          max-height: 90vh; overflow: auto;
+          /* dvh so keyboard doesn't cover Save; safe-area keeps content
+             clear of the notch/home indicator. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 40px);
+          overflow: hidden;
           display: flex; flex-direction: column;
           box-shadow: 0 24px 64px rgba(0,0,0,0.3);
         }
@@ -2390,7 +2409,14 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
           display: flex;
         }
         .edit-close:hover { background: var(--muted); color: var(--foreground); }
-        .edit-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+        .edit-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          padding: 16px 18px;
+          display: flex; flex-direction: column; gap: 14px;
+        }
         .edit-field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
         .edit-field > span { font-weight: 500; color: var(--muted-foreground); font-size: 12px; }
         .edit-field input, .edit-field textarea {
@@ -2403,8 +2429,11 @@ export function PlanView({ planId, shareToken, onBack }: PlanViewProps) {
         .edit-field textarea { resize: vertical; }
         .edit-row { display: flex; gap: 12px; }
         .edit-foot {
+          flex-shrink: 0;
           display: flex; justify-content: flex-end; gap: 10px;
-          padding: 12px 18px 16px; border-top: 1px solid var(--border);
+          padding: 12px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+          border-top: 1px solid var(--border);
+          background: var(--card);
         }
         .edit-cancel, .edit-save {
           padding: 10px 18px; border-radius: 10px; font-size: 13px;

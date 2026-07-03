@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Checklist } from '@/lib/types';
 import { ChecklistCard } from './checklist-card';
 import { ConfirmDialog } from './confirm-dialog';
@@ -13,7 +13,7 @@ interface ChecklistListProps {
   onUseTemplate: (templateId: string) => void;
 }
 
-export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTemplate }: ChecklistListProps) {
+export function ChecklistList({ onSelectChecklist, onUseTemplate }: ChecklistListProps) {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [sharedChecklists, setSharedChecklists] = useState<Checklist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,7 +81,6 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
   };
 
   const filtered = processChecklists(tab === 'mine' ? checklists : sharedChecklists);
-  const activeList = tab === 'mine' ? checklists : sharedChecklists;
   const showFilterSort = tab !== 'templates';
 
   if (isLoading) {
@@ -193,7 +192,7 @@ export function ChecklistList({ onSelectChecklist, onCreateChecklist, onUseTempl
 
       {/* Templates tab */}
       {tab === 'templates' ? (
-        <TemplatesSection onUseTemplate={(id, _title) => onUseTemplate(id)} searchQuery={searchQuery} />
+        <TemplatesSection onUseTemplate={(id) => onUseTemplate(id)} searchQuery={searchQuery} />
       ) : (
         <>
           {/* Content */}

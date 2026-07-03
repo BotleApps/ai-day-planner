@@ -54,6 +54,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fail fast if the shared web/lib code is broken before spending 15+ min
+      # in Xcode. The native shell loads the deployed web app over HTTPS, so
+      # broken libs = broken app regardless of native signing.
+      - name: Unit tests + coverage
+        run: npm run test:coverage
+        env:
+          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
       - name: Add iOS platform (if missing)
         run: |
           if [ ! -d ios ]; then

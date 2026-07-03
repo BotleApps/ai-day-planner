@@ -5,8 +5,77 @@ import { generateId, generateShareToken, getDatesBetween } from '@/lib/utils';
 import { auth } from '@/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-// Helper: shape a raw Prisma plan row back into the Plan shape the frontend expects
-function shapePlan(plan: any) {
+// Helper: shape a raw Prisma plan row back into the Plan shape the frontend
+// expects. Every field is optional in the input types because the same shaper
+// runs against both the detail `include`-all query and the list-view `select`
+// (which returns only `activities: { id, status }`). The shaper defensively
+// falls back to `undefined` for anything not selected.
+type ActivityRow = {
+  id: string;
+  title?: string;
+  description?: string | null;
+  type?: string;
+  startTime?: string;
+  duration?: number;
+  endTime?: string | null;
+  location?: string | null;
+  address?: string | null;
+  status?: string;
+  priority?: string;
+  notes?: string | null;
+  cost?: number | null;
+  currency?: string | null;
+  weatherDependent?: boolean;
+  isBreak?: boolean;
+  aiSuggested?: boolean;
+  order?: number;
+  color?: string | null;
+  icon?: string | null;
+};
+
+type DayRow = {
+  id: string;
+  date?: string;
+  dayNumber?: number;
+  title?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  activities?: ActivityRow[];
+};
+
+type PlanRow = {
+  id: string;
+  title?: string;
+  description?: string;
+  destination?: string;
+  coverImage?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  createdBy?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  isPublic?: boolean;
+  shareLink?: string | null;
+  wakeUpTime?: string;
+  sleepTime?: string;
+  pace?: string;
+  breakFrequency?: number;
+  breakDuration?: number;
+  travelBuffer?: number;
+  mealBreakfast?: string | null;
+  mealLunch?: string | null;
+  mealDinner?: string | null;
+  activityTypes?: string[];
+  accessibility?: string[];
+  dietaryRestrictions?: string[];
+  interests?: string[];
+  days?: DayRow[];
+};
+
+function shapePlan(plan: PlanRow) {
   return {
     _id: plan.id,
     id: plan.id,
@@ -42,7 +111,7 @@ function shapePlan(plan: any) {
       dietaryRestrictions: plan.dietaryRestrictions,
       interests: plan.interests,
     },
-    days: (plan.days ?? []).map((day: any) => ({
+    days: (plan.days ?? []).map((day: DayRow) => ({
       _id: day.id,
       id: day.id,
       date: day.date,
@@ -53,8 +122,8 @@ function shapePlan(plan: any) {
       startTime: day.startTime ?? undefined,
       endTime: day.endTime ?? undefined,
       activities: (day.activities ?? [])
-        .sort((a: any, b: any) => a.order - b.order)
-        .map((act: any) => ({
+        .sort((a: ActivityRow, b: ActivityRow) => (a.order ?? 0) - (b.order ?? 0))
+        .map((act: ActivityRow) => ({
           _id: act.id,
           id: act.id,
           title: act.title,
@@ -212,7 +281,7 @@ export async function GET(request: Request) {
         include: { plan: { include: { days: { include: DAY_INCLUDE } } } },
         orderBy: { accessedAt: 'desc' },
       });
-      const plans = accesses.map((a: any) => ({
+      const plans = accesses.map((a: (typeof accesses)[number]) => ({
         ...shapePlan(a.plan),
         userPermission: a.permission,
       }));
@@ -283,8 +352,34 @@ export async function POST(request: Request) {
     const prefs = { ...DEFAULT_PREFERENCES, ...preferences };
     const dates = getDatesBetween(startDate, endDate);
 
+    type IncomingActivity = {
+      id?: string;
+      title?: string;
+      description?: string;
+      type?: string;
+      startTime?: string;
+      duration?: number;
+      status?: string;
+      order?: number;
+      priority?: string;
+      location?: string;
+      notes?: string;
+      cost?: number;
+      isBreak?: boolean;
+      aiSuggested?: boolean;
+    };
+    type IncomingDay = {
+      id?: string;
+      date?: string;
+      dayNumber?: number;
+      title?: string;
+      description?: string;
+      notes?: string;
+      activities?: IncomingActivity[];
+    };
+
     const daysData = incomingDays?.length
-      ? incomingDays.map((d: any, i: number) => ({
+      ? (incomingDays as IncomingDay[]).map((d: IncomingDay, i: number) => ({
           id: d.id || generateId(),
           date: d.date || dates[i] || startDate,
           dayNumber: d.dayNumber || i + 1,
@@ -292,7 +387,7 @@ export async function POST(request: Request) {
           description: d.description,
           notes: d.notes,
           activities: {
-            create: (d.activities || []).map((a: any, ai: number) => ({
+            create: (d.activities || []).map((a: IncomingActivity, ai: number) => ({
               id: a.id || generateId(),
               title: a.title || 'Activity',
               description: a.description,
@@ -379,7 +474,10 @@ export async function PUT(request: Request) {
     // Rebuild days if date range changed
     if (newStart !== existing.startDate || newEnd !== existing.endDate) {
       const dates = getDatesBetween(newStart, newEnd);
-      const existingByDate = new Map(existing.days.map((d: any) => [d.date, d]));
+      type ExistingDay = (typeof existing.days)[number];
+      const existingByDate = new Map<string, ExistingDay>(
+        existing.days.map((d: ExistingDay) => [d.date, d] as [string, ExistingDay]),
+      );
 
       await prisma.$transaction(async (tx) => {
         // Delete days that no longer fall in range
@@ -388,7 +486,7 @@ export async function PUT(request: Request) {
         });
 
         // Create or update day numbers for each date in range
-        const existingDates = new Set(existing.days.map((d: any) => d.date));
+        const existingDates = new Set(existing.days.map((d: ExistingDay) => d.date));
         for (let i = 0; i < dates.length; i++) {
           const date = dates[i];
           if (!existingDates.has(date)) {
@@ -396,7 +494,7 @@ export async function PUT(request: Request) {
               data: { id: generateId(), planId: id, date, dayNumber: i + 1 },
             });
           } else {
-            const day = existingByDate.get(date) as any;
+            const day = existingByDate.get(date)!;
             await tx.dayPlan.update({
               where: { id: day.id },
               data: { dayNumber: i + 1 },
@@ -409,7 +507,7 @@ export async function PUT(request: Request) {
     }
 
     // Build flat update data (only allowed scalar fields)
-    const data: Record<string, any> = {};
+    const data: Record<string, unknown> = {};
     if (updates.title !== undefined) data.title = updates.title;
     if (updates.description !== undefined) data.description = updates.description;
     if (updates.destination !== undefined) data.destination = updates.destination;

@@ -34,8 +34,6 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - name: ESLint
-        # Advisory while lint backlog is cleared. Flip to hard fail once green.
-        continue-on-error: true
         run: npm run lint
       - name: TypeScript type-check
         run: npm run type-check

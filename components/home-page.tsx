@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useSession, signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   Plus,
   Calendar,
@@ -178,7 +179,7 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
         <div className="header-content">
           <div className="logo">
             <div className="logo-icon">
-              <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={32} height={32} />
+              <Image src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={32} height={32} />
             </div>
             <span>
               {section === 'plans' ? 'Plans' : section === 'checklists' ? 'Checklists' : 'Profile'}
@@ -909,7 +910,13 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
           overflow-x: hidden;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior-y: contain;
+          /* Reserve room for the fixed bottom nav (72px) plus the iOS home
+             indicator so scrollable content isn't hidden behind it. */
           padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+          /* Horizontal safe-area so notches/Dynamic Island in landscape
+             don't clip the plan cards/list rows. */
+          padding-left: env(safe-area-inset-left, 0px);
+          padding-right: env(safe-area-inset-right, 0px);
           min-height: 0;
         }
 
@@ -1133,6 +1140,10 @@ export function HomePage({ onSelectPlan, onCreatePlan, onSelectChecklist, onCrea
 
         .nav-item {
           flex: 1;
+          /* Ensure a comfortable minimum touch target height (44pt Apple HIG,
+             48dp Android Material) so the nav is easily tappable even with
+             the home indicator adding negative visual space below. */
+          min-height: 48px;
           display: flex;
           flex-direction: column;
           align-items: center;

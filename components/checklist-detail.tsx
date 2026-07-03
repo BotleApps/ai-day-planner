@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import {
   Checklist,
@@ -37,15 +37,12 @@ function groupItems(items: ChecklistItem[]): { groupName: string; items: Checkli
 }
 
 export default function ChecklistDetail({ checklistId, shareToken, onBack }: ChecklistDetailProps) {
-  const { status, data: session } = useSession();
+  const { status } = useSession();
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [userPermission, setUserPermission] = useState<'owner' | 'edit' | 'view'>('view');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [newItemTitle, setNewItemTitle] = useState('');
-  const [newItemGroup, setNewItemGroup] = useState('');
-  const [addingItem, setAddingItem] = useState(false);
   const addInputRef = useRef<HTMLInputElement>(null);
 
   // Header more menu
@@ -80,7 +77,7 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
   const [shareLoading, setShareLoading] = useState(false);
   const [shareLinkGenerating, setShareLinkGenerating] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   const isOwner = userPermission === 'owner';
@@ -147,33 +144,8 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
     if (!res.ok) setChecklist(prev);
   };
 
-  const handleAddItem = async (groupOverride?: string) => {
-    if (!checklist || !newItemTitle.trim() || !isEditable) return;
-    setAddingItem(true);
-    try {
-      const res = await fetch('/api/checklists/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          checklistId: checklist.id,
-          title: newItemTitle.trim(),
-          groupName: (groupOverride ?? newItemGroup).trim(),
-        }),
-      });
-      const data = await res.json();
-      if (data.item) {
-        setChecklist((prev) => (prev ? { ...prev, items: [...prev.items, data.item] } : null));
-        setNewItemTitle('');
-      }
-    } finally {
-      setAddingItem(false);
-      addInputRef.current?.focus();
-    }
-  };
-
   // Inline "add item to a specific group" — keeps state local to the group block
   const [groupAddTitle, setGroupAddTitle] = useState<Record<string, string>>({});
-  const [openAddGroup, setOpenAddGroup] = useState<string | null>(null);
   const handleAddItemToGroup = async (groupName: string) => {
     if (!checklist || !isEditable) return;
     const title = (groupAddTitle[groupName] ?? '').trim();
@@ -199,7 +171,6 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
     }
     // Set as the default target for the next added items; group is only persisted
     // once at least one item with that groupName exists.
-    setNewItemGroup(name);
     setShowNewGroupInput(false);
     setNewGroupName('');
     addInputRef.current?.focus();
@@ -428,6 +399,7 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
     return { text: `Due in ${diffDays}d`, color: '#6b7280' };
   }, [checklist?.dueDate, checklist?.dueTime]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- checklist.items is the only field read; watching the whole `checklist` would re-run on unrelated metadata edits.
   const grouped = useMemo(() => (checklist ? groupItems(checklist.items) : []), [checklist?.items]);
 
   // Gated slice for unauthenticated viewers — show ~70% then a paywall card
@@ -445,6 +417,7 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       remaining -= take.length;
     }
     return { groups: out, hiddenCount: total - limit };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checklist.items is the only field read; watching the whole `checklist` would re-run on unrelated metadata edits.
   }, [grouped, isUnauthenticatedViewer, checklist?.items]);
 
   // Always ensure a "General" (empty groupName) group is present for editable views
@@ -489,8 +462,6 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
       </div>
     );
   }
-
-  const namedGroupCount = grouped.filter((g) => g.groupName).length;
 
   return (
     <div className="checklist-detail">
@@ -1297,7 +1268,10 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
           background: var(--background, white);
           border-radius: 16px;
           max-width: 520px; width: 100%;
-          max-height: 90vh; overflow: hidden;
+          /* dvh so the modal shrinks with the iOS keyboard; safe-area top +
+             bottom keeps content clear of notch and home indicator. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px);
+          overflow: hidden;
           display: flex; flex-direction: column;
           box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
@@ -1315,14 +1289,19 @@ export default function ChecklistDetail({ checklistId, shareToken, onBack }: Che
         }
         .modal-close:hover { background: var(--muted); }
         .modal-body {
+          flex: 1 1 auto;
+          min-height: 0;
           padding: 16px 20px;
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
           display: flex; flex-direction: column; gap: 14px;
         }
         .modal-footer {
+          flex-shrink: 0;
           display: flex; gap: 8px; justify-content: flex-end;
-          padding: 12px 20px;
+          padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
           border-top: 1px solid var(--border, #e5e7eb);
+          background: var(--background, white);
         }
         .btn-primary {
           padding: 8px 18px; border-radius: 8px; border: none;

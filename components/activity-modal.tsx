@@ -380,6 +380,7 @@ export function ActivityModal({
             </label>
             {formData.imageUrl ? (
               <div className="image-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element -- user-supplied URL from unknown domains; next/image would require host allowlist */}
                 <img src={formData.imageUrl} alt="Activity" />
                 <button
                   type="button"
@@ -514,12 +515,31 @@ export function ActivityModal({
           border-radius: 24px 24px 0 0;
           width: 100%;
           max-width: 100%;
-          max-height: 94svh;
-          overflow-y: auto;
+          /* Bound to the dynamic viewport minus the iOS safe areas so the
+             modal never extends under the notch or home indicator. Children
+             use flex layout so the footer (.form-actions) stays pinned. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
           overscroll-behavior: contain;
           -webkit-overflow-scrolling: touch;
           box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
           animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        .modal-content > .modal-header,
+        .modal-content > .drag-handle {
+          flex-shrink: 0;
+        }
+
+        /* The form is the scrollable body. Its sticky .form-actions footer
+           stays visible regardless of content length or iOS keyboard. */
+        .modal-content > form {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
         }
 
         @keyframes slideUp {
@@ -535,7 +555,7 @@ export function ActivityModal({
           .modal-content {
             border-radius: 20px;
             max-width: 520px;
-            max-height: 90svh;
+            max-height: 90dvh;
             box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
           }
         }
@@ -652,7 +672,8 @@ export function ActivityModal({
           display: flex;
           flex-direction: column;
           gap: 18px;
-          padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+          /* Reserve room so the last field isn't kissing the sticky footer. */
+          padding-bottom: 12px;
         }
 
         .form-group {
@@ -947,11 +968,19 @@ export function ActivityModal({
           color: var(--foreground);
         }
 
-        /* Form Actions */
+        /* Form Actions — sticky footer so Cancel / Save are always visible,
+           even when the body scrolls or the iOS keyboard reduces height.
+           Safe-area padding ensures the buttons clear the home indicator. */
         .form-actions {
+          position: sticky;
+          bottom: 0;
+          z-index: 2;
           display: flex;
           gap: 10px;
-          margin-top: 4px;
+          margin: 0 -20px -20px;
+          padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+          background: var(--card);
+          border-top: 1px solid var(--border);
         }
 
         .btn-secondary, .btn-primary {

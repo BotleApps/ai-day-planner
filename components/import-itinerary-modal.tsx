@@ -326,7 +326,7 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
 
                     {expandedDay === i && (
                       <div className="day-activities">
-                        {day.activities.map((act, ai) => (
+                        {day.activities.map((act) => (
                           <div key={act.id} className="activity-row">
                             <span className="act-icon">{ACTIVITY_ICONS[act.type]}</span>
                             <div className="act-info">
@@ -413,7 +413,9 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           border-radius: 20px;
           width: 100%;
           max-width: 640px;
-          max-height: 88vh;
+          /* dvh shrinks with iOS keyboard; safe-area-inset-top keeps the modal
+             clear of the notch on mobile fullscreen. */
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px);
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -473,8 +475,9 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
 
         /* Body */
         .modal-body {
-          flex: 1;
-          overflow-y: scroll;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior: contain;
           padding: 20px 24px;
@@ -790,14 +793,16 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
           border-radius: 0 0 20px 20px;
         }
 
-        /* Footer */
+        /* Footer — flex-none + safe-area padding so Import/Create is always
+           reachable, even with 14-day itineraries in the preview. */
         .modal-footer {
           display: flex;
           align-items: center;
           justify-content: flex-end;
           gap: 10px;
-          padding: 16px 24px;
+          padding: 16px 24px calc(16px + env(safe-area-inset-bottom, 0px));
           border-top: 1px solid var(--border);
+          background: var(--card);
           flex-shrink: 0;
         }
 
@@ -833,7 +838,7 @@ Afternoon: Visit Hoan Kiem Lake and Ngoc Son Temple...`}
 
         @media (max-width: 520px) {
           .overlay { padding: 12px; }
-          .modal { max-height: 96vh; border-radius: 16px; }
+          .modal { max-height: calc(100dvh - env(safe-area-inset-top, 0px)); border-radius: 16px; }
           .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
           .trip-chips { flex-direction: column; }
           textarea { font-size: 16px; min-height: 150px; }

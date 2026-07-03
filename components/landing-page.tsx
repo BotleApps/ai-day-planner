@@ -1,6 +1,7 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
+import Image from 'next/image';
 import {
   Sparkles,
   Calendar,
@@ -26,7 +27,7 @@ export function LandingPage() {
         <div className="nav-inner">
           <div className="brand">
             <div className="brand-icon">
-              <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={28} height={28} />
+              <Image src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={28} height={28} />
             </div>
             <span className="brand-name">Sorted<strong>Plan</strong></span>
           </div>
@@ -172,7 +173,7 @@ export function LandingPage() {
         <div className="nav-inner">
           <div className="brand">
             <div className="brand-icon brand-icon--sm">
-              <img src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={22} height={22} />
+              <Image src="/icons/icon-sorted-plan.svg" alt="SortedPlan" width={22} height={22} />
             </div>
             <span className="brand-name brand-name--sm">Sorted<strong>Plan</strong></span>
           </div>

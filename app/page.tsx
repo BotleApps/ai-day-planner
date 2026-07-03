@@ -34,6 +34,7 @@ function HomeContent() {
     const checklistId = searchParams.get('checklist');
     const cshare = searchParams.get('cshare');
 
+    /* eslint-disable react-hooks/set-state-in-effect -- syncing URL search params (external source) into React state */
     if (planId) {
       setSelectedPlanId(planId);
       setShareToken(null);
@@ -55,6 +56,7 @@ function HomeContent() {
       setSelectedPlanId(null);
       setShareToken(null);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [searchParams]);
 
   const handleSelectPlan = (planId: string) => {

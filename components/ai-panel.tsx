@@ -51,7 +51,6 @@ export function AIPanel({
   destination,
   onAddActivity,
   onReplaceActivities,
-  onSuggestChange: _onSuggestChange,
   isFloating = false,
 }: AIPanelProps) {
   const router = useRouter();
@@ -382,7 +381,9 @@ export function AIPanel({
 
         .ai-panel.floating .panel-content {
           height: auto;
-          max-height: 60vh;
+          /* dvh shrinks with the iOS keyboard so the input-area stays
+             visible when the user is typing. */
+          max-height: min(60dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 80px));
         }
 
         .panel-toggle {
@@ -472,12 +473,18 @@ export function AIPanel({
         .panel-content {
           display: flex;
           flex-direction: column;
+          /* Cap to dvh so the panel shrinks when the iOS keyboard opens.
+             The 400px default is retained for desktop where the panel is
+             embedded in a card and doesn't need to track the viewport. */
           height: 400px;
+          max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 120px);
         }
 
         @media (max-width: 480px) {
           .panel-content {
-            height: 55vh;
+            /* dvh so the keyboard doesn't cover the input on iOS. */
+            height: 55dvh;
+            max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 120px);
           }
         }
 
@@ -678,7 +685,12 @@ export function AIPanel({
           display: flex;
           gap: 10px;
           padding: 16px;
+          /* Sticky footer so the input stays visible when messages scroll
+             or the keyboard opens; flex-shrink:0 keeps it from collapsing. */
+          flex-shrink: 0;
           border-top: 1px solid var(--border);
+          background: var(--card);
+          padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
         }
 
         .input-area input {
@@ -740,11 +752,9 @@ export function AIPanel({
           }
         }
 
-        @supports (padding-bottom: env(safe-area-inset-bottom)) {
-          .input-area {
-            padding-bottom: calc(16px + env(safe-area-inset-bottom));
-          }
-        }
+        /* Note: safe-area padding is now baked into .input-area's base
+           rule (with a 0px fallback) instead of hidden behind @supports,
+           so devices that don't advertise env() support still get the fix. */
       `}</style>
     </div>
   );

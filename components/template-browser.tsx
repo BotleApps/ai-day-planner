@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ChecklistTemplate, ChecklistTemplateCategory, AIChecklistGenerationResult } from '@/lib/types';
 import { Search, X, Sparkles, LayoutTemplate } from 'lucide-react';
 
@@ -33,7 +33,7 @@ export function TemplateBrowser({ isOpen, onClose, onSelect }: TemplateBrowserPr
     const params = new URLSearchParams();
     if (query) params.set('q', query);
     if (category !== 'all') params.set('category', category);
-    setIsLoading(true);
+    setIsLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kicking off an async fetch requires setting loading state
     fetch(`/api/checklists/templates?${params.toString()}`)
       .then(r => r.json())
       .then(data => setTemplates(data.templates || []))
@@ -109,7 +109,11 @@ export function TemplateBrowser({ isOpen, onClose, onSelect }: TemplateBrowserPr
             z-index: 200; display: flex; align-items: flex-end;
           }
           .browser-sheet {
-            width: 100%; max-height: 85vh; background: var(--background, white);
+            width: 100%;
+            /* dvh so long grids don't extend into the notch/home indicator;
+               safe-area on top keeps the sheet clear of the notch. */
+            max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+            background: var(--background, white);
             border-radius: 20px 20px 0 0; overflow: hidden;
             display: flex; flex-direction: column;
           }
@@ -140,7 +144,13 @@ export function TemplateBrowser({ isOpen, onClose, onSelect }: TemplateBrowserPr
           }
           .cat-chip.active { background: var(--primary, #6366f1); color: white; border-color: var(--primary); }
           .templates-grid {
-            flex: 1; overflow-y: auto; padding: 16px;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            /* Safe-area bottom padding so the last row of cards clears the
+               iOS home indicator. */
+            padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
             display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;
           }
           .skeleton {
