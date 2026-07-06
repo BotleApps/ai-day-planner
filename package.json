@@ -42,7 +42,7 @@
     "cap:add:android": "cap add android"
   },
   "dependencies": {
-    "@capacitor/app": "^7.0.0",
+    "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/keyboard": "^7.0.0",
     "@capacitor/splash-screen": "^7.0.0",
