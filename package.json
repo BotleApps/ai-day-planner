@@ -45,7 +45,7 @@
     "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/keyboard": "^7.0.0",
-    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^7.0.0",
     "@capgo/capacitor-social-login": "^7.20.0",
     "@prisma/adapter-pg": "^7.6.0",
